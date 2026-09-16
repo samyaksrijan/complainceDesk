@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  :root {
+    /* Forest Ink */
+    /* Background layers */
+    --bg-deep:      #060d09;
+    --bg-base:      #0b1610;
+    --bg-surface:   #111f17;
+    --bg-elevated:  #182a1f;
+    
+    /* Borders */
+    --border-color: #1e3328;
+    --border-focus: #2d5a42;
+    
+    /* Green accent spectrum */
+    --green-50:     #f0fdf4;
+    --green-100:    #dcfce7;
+    --green-200:    #bbf7d0;
+    --green-300:    #86efac;
+    --green-400:    #4ade80;
+    --green-500:    #22c55e;
+    --green-600:    #16a34a;
+    --green-700:    #15803d;
+    --green-800:    #166534;
+    --green-900:    #14532d;
+    
+    /* Text */
+    --text-primary: #e8f5ec;
+    --text-secondary: #94b8a4;
+    --text-muted:   #5a7d6a;
+    --text-inverse: #060d09;
+    
+    /* Semantic colors */
+    --success:      #22c55e;
+    --error:        #f87171;
+    --warning:      #fbbf24;
+    --info:         #60a5fa;
+    
+    /* Special */
+    --glow-green:   rgba(34, 197, 94, 0.15);
+    --glow-soft:    rgba(34, 197, 94, 0.05);
+    --shadow:       rgba(0, 0, 0, 0.4);
+
+    /* Shadcn defaults mapped to Forest Ink */
+    --background: var(--bg-base);
+    --foreground: var(--text-primary);
+    
+    --card: var(--bg-surface);
+    --card-foreground: var(--text-primary);
+
+    --popover: var(--bg-elevated);
+    --popover-foreground: var(--text-primary);
+
+    --primary: var(--green-600);
+    --primary-foreground: var(--text-inverse);
+
+    --secondary: var(--bg-surface);
+    --secondary-foreground: var(--text-secondary);
+
+    --muted: var(--bg-surface);
+    --muted-foreground: var(--text-muted);
+
+    --accent: var(--bg-elevated);
+    --accent-foreground: var(--text-primary);
+
+    --destructive: var(--error);
+    --destructive-foreground: var(--text-inverse);
+
+    --border: var(--border-color);
+    --input: var(--border-color);
+    --ring: var(--green-500);
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+}
+
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  .print-break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Reset layout constraints for print */
+  .report-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Force background colors to print if user hasn't checked 'print backgrounds' (WebKit-specific) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Make text dark instead of light theme */
+  .text-text-primary, .text-text-secondary {
+    color: #111 !important;
+  }
+  
+  .text-text-muted {
+    color: #444 !important;
+  }
+
+  /* Adjust borders for print */
+  .border, .border-border, .border-b {
+    border-color: #ddd !important;
+  }
+  
+  .bg-surface, .bg-elevated, .bg-base {
+    background-color: white !important;
+  }
+  
+  .bg-base\/30, .bg-base\/50 {
+    background-color: #f9f9f9 !important;
+  }
+}

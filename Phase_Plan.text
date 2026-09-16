@@ -1,0 +1,682 @@
+Great direction. Before we start building anything, let me lay out the complete frontend specification — every page, every field, every interaction — mapped directly to the backend we built. Then we define the green design system.
+
+---
+
+## COMPLETE FRONTEND FIELD MAPPING
+
+Here is every screen the frontend needs, with every field pulled directly from backend APIs.
+
+---
+
+### SCREEN 1: Login Page (`/login`)
+
+**API:** `POST /api/auth/callback/credentials` (NextAuth)
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| Email | text input | yes | placeholder: admin@demo.com |
+| Password | password input | yes | placeholder: •••••••• |
+
+**Actions:**
+- Submit login → redirect to `/dashboard`
+- Link to `/register`
+- Demo credentials hint displayed below form
+- Rate limited: 10 attempts per 15 min
+
+**Error states:**
+- Invalid credentials → "Invalid email or password"
+- Rate limited → "Too many login attempts. Try again later."
+
+---
+
+### SCREEN 2: Register Page (`/register`)
+
+**API:** `POST /api/auth/register`
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| Organization Name | text input | yes | sanitized, max 255 chars |
+| Your Name | text input | yes | sanitized, max 255 chars |
+| Email | email input | yes | must be unique |
+| Password | password input | yes | min 8, max 128, must have letter + number |
+
+**Actions:**
+- Submit → auto-login → redirect to `/dashboard`
+- Link to `/login`
+
+**Validation feedback:**
+- Password strength indicator
+- Real-time field validation
+
+---
+
+### SCREEN 3: Dashboard (`/dashboard`)
+
+**API:** `GET /api/dashboard/stats` + `GET /api/dashboard/activity`
+
+**Stats Cards (top row):**
+
+| Stat | Source | Description |
+|------|--------|-------------|
+| Total Documents | `stats.totalDocuments` | Count of all uploaded documents |
+| Average Score | `stats.averageScore` | Overall compliance percentage |
+| Compliant | `stats.compliantCount` | Documents at 100% compliance |
+| Non-Compliant | `stats.nonCompliantCount` | Documents below 100% |
+| Pending Review | `stats.pendingCount` | Documents not yet checked |
+
+**Compliance Rate Ring:**
+- Visual donut/ring chart showing `stats.complianceRate` percentage
+- Color: green (>=80%), amber (50-79%), red (<50%)
+
+**Category Scores (if available from `stats.categoryScores`):**
+
+| Field | Type |
+|-------|------|
+| Category name | string |
+| Average score | number (0-100) |
+| Document count | number |
+
+**Status Distribution:**
+
+| Status | Count | Color |
+|--------|-------|-------|
+| UPLOADED | count | gray |
+| PROCESSING | count | blue |
+| MATCHED | count | cyan |
+| UNMATCHED | count | amber |
+| UNDER_REVIEW | count | purple |
+| COMPLIANT | count | green |
+| NON_COMPLIANT | count | red |
+
+**Activity Feed:**
+
+| Field | Source |
+|-------|--------|
+| Action | `activity.action` (e.g., DOCUMENT_UPLOADED, CHECKLIST_CREATED) |
+| Resource Name | `activity.resourceName` |
+| Resource Type | `activity.resourceType` |
+| User Name | `activity.user.name` |
+| Timestamp | `activity.createdAt` |
+| Pagination | `page`, `limit`, `total`, `totalPages` |
+
+---
+
+### SCREEN 4: Documents List (`/documents`)
+
+**API:** `GET /api/documents?page=1&limit=20&status=xxx&search=xxx`
+
+**Page header:**
+- Title: "Documents"
+- Subtitle: "Upload and manage audit documents"
+- Button: "Upload Document" (ADMIN, AUDITOR only)
+
+**Filters bar:**
+
+| Filter | Type | Options |
+|--------|------|---------|
+| Search | text input | searches document name |
+| Status | dropdown | ALL, UPLOADED, PROCESSING, MATCHED, UNMATCHED, UNDER_REVIEW, COMPLIANT, NON_COMPLIANT |
+
+**Document table columns:**
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| Name | `document.name` | clickable → detail page |
+| Status | `document.status` | color-coded badge |
+| Score | `document.latestScore` | percentage, color-coded, "-" if no score |
+| Uploaded By | `document.uploadedBy.name` | user name |
+| Created | `document.createdAt` | relative time (e.g., "2 hours ago") |
+| Actions | — | View, Delete (admin only) |
+
+**Pagination:** page numbers + prev/next
+
+---
+
+### SCREEN 5: Document Upload Modal/Drawer
+
+**API:** `POST /api/documents/upload`
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| Document Name | text input | yes | max 255 chars |
+| File | file dropzone | yes | pdf, docx, png, jpg, txt, max 10MB |
+
+**File dropzone states:**
+- Empty: "Drop file here or click to browse"
+- File selected: filename, size, remove button
+- Uploading: progress indicator
+- Success: green checkmark, redirect to documents list
+- Error: red message
+
+---
+
+### SCREEN 6: Document Detail (`/documents/[id]`)
+
+**API:** `GET /api/documents/[id]`
+
+**Header section:**
+
+| Field | Display |
+|-------|---------|
+| Document name | large heading |
+| Status | color-coded badge |
+| File type | icon + label |
+| Uploaded by | user name |
+| Upload date | formatted date |
+
+**Extracted Text section:**
+- Collapsible panel showing `document.extractedText`
+- Truncated by default (show first 500 chars with "Show more")
+- Monospace font for raw text
+
+**Compliance Status section (if results exist):**
+
+| Field | Source |
+|-------|--------|
+| Overall Score | large number with color (green/amber/red) |
+| Status | COMPLIANT or NON_COMPLIANT badge |
+| Summary | LLM-generated summary text |
+| Total Items | count |
+| Passed | green count |
+| Failed | red count |
+| Not Found | gray count |
+| Needs Review | amber count |
+
+**Score Ring:** Visual donut showing pass/fail/not-found/review proportions
+
+**Matched Checklist section:**
+
+| Field | Display |
+|-------|---------|
+| Checklist name | clickable link to checklist |
+| Match method | "Auto-matched" or "Manually matched" |
+| Confidence | percentage (if auto-matched) |
+
+**Action buttons (top right):**
+
+| Button | Visibility | API |
+|--------|-----------|-----|
+| "Match to Checklist" | When status is UNMATCHED | opens match modal |
+| "Run Compliance Check" | When status is MATCHED | `POST /api/documents/[id]/check` |
+| "View Results" | When status is COMPLIANT or NON_COMPLIANT | scrolls to results |
+| "Download PDF" | When results exist | `GET /api/documents/[id]/results/pdf` |
+| "Delete" | ADMIN only | `DELETE /api/documents/[id]` |
+
+---
+
+### SCREEN 7: Match Checklist Modal
+
+**API:** `POST /api/documents/[id]/match`
+
+**Auto-match mode:**
+- Shows loading state during matching
+- If confident match found: shows checklist name + confidence, confirm button
+- If no confident match: shows ranked suggestions list
+
+**Manual mode:**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| Checklist | searchable dropdown | shows all org checklists + templates |
+| Search | text input | filters checklists by name |
+
+**Suggestions list (when auto-match fails):**
+
+| Field | Display |
+|-------|---------|
+| Checklist name | clickable |
+| Match score | percentage bar |
+| Source type | TEMPLATE or SCANNED badge |
+| Action | "Select this checklist" button |
+
+---
+
+### SCREEN 8: Compliance Results Detail
+
+**API:** `GET /api/documents/[id]/results`
+
+**Results table:**
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| # | row number | |
+| Field Name | `item.fieldName` | |
+| Expected | checklist item `thresholdValue` + `unit` | formatted based on field type |
+| Found | `item.extractedValue` | what the LLM extracted |
+| Status | `item.status` | PASS (green), FAIL (red), NOT_FOUND (gray), NEEDS_REVIEW (amber) |
+| Notes | `item.notes` | LLM explanation or evaluation notes |
+
+**Expected value formatting:**
+
+| Field Type | Display Format |
+|------------|---------------|
+| NUMBER + LESS_THAN | "< 50 mg/L" |
+| NUMBER + GREATER_THAN | "> 100 ppm" |
+| NUMBER + EQUALS | "= 7.0" |
+| NUMBER + RANGE | "50 - 100 mg/L" |
+| BOOLEAN + MUST_BE_PRESENT | "Must be present" |
+| BOOLEAN + IS_TRUE | "Must be true" |
+| TEXT + MUST_CONTAIN | 'Must contain "certified"' |
+| TEXT + EQUALS | '= "ISO 9001"' |
+| SELECT + EQUALS | 'Must be "Pass" (from: Pass, Fail, N/A)' |
+
+---
+
+### SCREEN 9: Checklists List (`/checklists`)
+
+**API:** `GET /api/checklists?page=1&limit=20&search=xxx&isTemplate=xxx&sourceType=xxx`
+
+**Page header:**
+- Title: "Checklists"
+- Subtitle: "Create and manage compliance checklists"
+- Button: "Create Checklist" (ADMIN, AUDITOR only)
+
+**Filters bar:**
+
+| Filter | Type | Options |
+|--------|------|---------|
+| Search | text input | searches checklist name |
+| Type | toggle/dropdown | All, Mine, Templates |
+| Source | dropdown | All, TEMPLATE, SCANNED, MANUAL |
+
+**Checklist cards (card grid, not table):**
+
+| Field | Display |
+|-------|---------|
+| Name | heading, clickable |
+| Description | truncated text (2 lines max) |
+| Source Type | badge (TEMPLATE / SCANNED / MANUAL) |
+| Template badge | "Template" badge if isTemplate=true |
+| Items count | "12 items" |
+| Created by | user name |
+| Created date | relative time |
+| Actions | Edit, Clone, Delete (admin only) |
+
+---
+
+### SCREEN 10: Checklist Builder (`/checklists/new` and `/checklists/[id]/edit`)
+
+**API:** `POST /api/checklists` or `PUT /api/checklists/[id]`
+
+**This is the most complex frontend component.**
+
+**Header section:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| Checklist Name | text input | yes |
+| Description | textarea | no |
+| Mark as Template | checkbox/toggle | no |
+
+**Items section (sortable list):**
+
+Each item row has:
+
+| Field | Type | Required | Conditional Display |
+|-------|------|----------|-------------------|
+| Field Name | text input | yes | always |
+| Field Type | select | yes | always: NUMBER, BOOLEAN, TEXT, SELECT |
+| Condition | select | yes | depends on field type (see below) |
+| Threshold Value | dynamic input | yes | depends on field type + condition |
+| Unit | text input | no | only for NUMBER |
+| Options | tag input | yes* | only for SELECT |
+| Description | text input | no | always |
+| Required | checkbox | no | always |
+| Sort Order | auto (drag order) | auto | always |
+
+**Condition options by field type:**
+
+| Field Type | Available Conditions |
+|------------|---------------------|
+| NUMBER | LESS_THAN, GREATER_THAN, EQUALS, RANGE |
+| BOOLEAN | MUST_BE_PRESENT, IS_TRUE |
+| TEXT | MUST_CONTAIN, EQUALS |
+| SELECT | EQUALS |
+
+**Threshold Value input by type:**
+
+| Field Type + Condition | Input Type | Example |
+|------------------------|-----------|---------|
+| NUMBER + LESS_THAN | number input | 50 |
+| NUMBER + GREATER_THAN | number input | 100 |
+| NUMBER + EQUALS | number input | 7.0 |
+| NUMBER + RANGE | two number inputs (min, max) | 50 - 100 |
+| BOOLEAN + MUST_BE_PRESENT | no input needed (disabled) | — |
+| BOOLEAN + IS_TRUE | no input needed (disabled) | — |
+| TEXT + MUST_CONTAIN | text input | "certified" |
+| TEXT + EQUALS | text input | "ISO 9001" |
+| SELECT + EQUALS | dropdown from options | "Pass" |
+
+**Item actions per row:**
+- Drag handle (reorder)
+- Duplicate
+- Delete
+
+**Bottom actions:**
+- "Add Item" button
+- "Save Checklist" primary button
+- "Cancel" secondary button
+
+---
+
+### SCREEN 11: Checklist Detail View (`/checklists/[id]`)
+
+**API:** `GET /api/checklists/[id]`
+
+**Header:**
+
+| Field | Display |
+|-------|---------|
+| Name | large heading |
+| Description | subtitle text |
+| Source Type | badge |
+| Template badge | if applicable |
+| Created by | user name |
+| Created date | formatted date |
+| Items count | total number |
+
+**Items table:**
+
+| Column | Content |
+|--------|---------|
+| # | sort order |
+| Field Name | text |
+| Type | NUMBER/BOOLEAN/TEXT/SELECT badge |
+| Condition | operator text |
+| Expected | formatted threshold value + unit |
+| Required | checkmark or dash |
+| Description | text or "-" |
+
+**Actions:**
+- Edit (ADMIN, AUDITOR)
+- Clone (all roles)
+- Delete (ADMIN only, with confirmation dialog)
+
+---
+
+### SCREEN 12: Reports List (`/reports`)
+
+**API:** `GET /api/documents?status=COMPLIANT&status=NON_COMPLIANT`
+
+**This shows all documents that have compliance results.**
+
+**Summary cards at top:**
+
+| Card | Content |
+|------|---------|
+| Total Reports | count of documents with results |
+| Average Score | percentage |
+| Fully Compliant | count at 100% |
+| Non-Compliant | count below 100% |
+
+**Reports table:**
+
+| Column | Source |
+|--------|--------|
+| Document | name, clickable → document detail |
+| Checklist | matched checklist name |
+| Score | percentage, color-coded |
+| Status | COMPLIANT/NON_COMPLIANT badge |
+| Passed / Total | "8/12 items" |
+| Date | when check was run |
+| Actions | View detail, Download PDF |
+
+---
+
+### SCREEN 13: User Management (`/admin/users`)
+
+**API:** `GET /api/admin/users`
+
+**ADMIN ONLY — redirect non-admins**
+
+**Page header:**
+- Title: "User Management"
+- Subtitle: "Manage organization members"
+- Button: "Invite User"
+
+**Users table:**
+
+| Column | Source |
+|--------|--------|
+| User | avatar + name + email |
+| Role | badge (ADMIN=gold, AUDITOR=blue, VIEWER=gray) |
+| Documents | `user._count.documents` |
+| Checklists | `user._count.checklists` |
+| Joined | `user.createdAt` relative time |
+| Actions | Change Role, Remove |
+
+**Role change:** inline dropdown or dialog with role select
+
+**Remove:** confirmation dialog "Are you sure? This cannot be undone."
+
+---
+
+### SCREEN 14: Invite User Modal
+
+**API:** `POST /api/admin/users/invite`
+
+| Field | Type | Required |
+|-------|------|----------|
+| Name | text input | yes |
+| Email | email input | yes |
+| Role | select (ADMIN, AUDITOR, VIEWER) | yes |
+
+**After invite:**
+- Show temporary password in a copy-to-clipboard field
+- Warning: "Share this password securely. It cannot be viewed again."
+
+---
+
+### SCREEN 15: Profile/Settings (dropdown from sidebar)
+
+**API:** `POST /api/auth/change-password`
+
+| Field | Type | Required |
+|-------|------|----------|
+| Current Password | password input | yes |
+| New Password | password input | yes |
+| Confirm Password | password input | yes |
+
+**Accessed from:** user dropdown in sidebar footer
+
+---
+
+### SCREEN 16: PDF Report (generated server-side)
+
+Already built in the backend. The frontend just needs a "Download PDF" button that hits `GET /api/documents/[id]/results/pdf`.
+
+---
+
+## GREEN DESIGN SYSTEM
+
+Now for the aesthetic. Here is the complete design specification.
+
+### Design Direction: **"Forest Ink"**
+
+A dark, grounded theme inspired by deep forest tones. Not neon green — think moss, fern, lichen, and moonlight through canopy. Professional enough for auditors, beautiful enough that they enjoy using it.
+
+### Color Palette
+
+```
+:root {
+  /* Background layers */
+  --bg-deep:      #060d09;     /* deepest background */
+  --bg-base:      #0b1610;     /* main background */
+  --bg-surface:   #111f17;     /* cards, panels */
+  --bg-elevated:  #182a1f;     /* modals, dropdowns, hover states */
+  
+  /* Borders */
+  --border:       #1e3328;     /* default borders */
+  --border-focus: #2d5a42;     /* focused input borders */
+  
+  /* Green accent spectrum */
+  --green-50:     #f0fdf4;     /* lightest tint */
+  --green-100:    #dcfce7;
+  --green-200:    #bbf7d0;
+  --green-300:    #86efac;     /* light accent */
+  --green-400:    #4ade80;     /* primary accent */
+  --green-500:    #22c55e;     /* primary */
+  --green-600:    #16a34a;     /* hover */
+  --green-700:    #15803d;     /* active */
+  --green-800:    #166534;     /* deep accent */
+  --green-900:    #14532d;     /* badge backgrounds */
+  
+  /* Text */
+  --text-primary: #e8f5ec;     /* main text — warm white with green tint */
+  --text-secondary: #94b8a4;   /* secondary text */
+  --text-muted:   #5a7d6a;     /* muted text */
+  --text-inverse: #060d09;     /* text on green backgrounds */
+  
+  /* Semantic colors */
+  --success:      #22c55e;     /* compliant, passed */
+  --error:        #f87171;     /* failed, non-compliant */
+  --warning:      #fbbf24;     /* needs review, amber */
+  --info:         #60a5fa;     /* processing, info states */
+  
+  /* Special */
+  --glow-green:   rgba(34, 197, 94, 0.15);   /* green glow for focus states */
+  --glow-soft:    rgba(34, 197, 94, 0.05);    /* subtle green ambient */
+  --shadow:       rgba(0, 0, 0, 0.4);
+}
+```
+
+### Typography
+
+```
+Display/Headings:  "Instrument Serif" — elegant, distinctive serif
+Body/UI:           "DM Sans" — clean, modern sans-serif
+Mono/Code:         "JetBrains Mono" — for extracted text, data values
+
+Font pairing rationale:
+  - Instrument Serif gives the headings a refined, editorial quality
+  - DM Sans is highly legible at small sizes for tables and forms
+  - JetBrains Mono for any raw data or extracted text display
+```
+
+### Component Styling Rules
+
+**Cards:**
+```
+background: var(--bg-surface)
+border: 1px solid var(--border)
+border-radius: 12px
+box-shadow: 0 1px 3px var(--shadow)
+hover: border-color shifts to var(--border-focus), subtle glow
+```
+
+**Buttons — Primary:**
+```
+background: var(--green-600)
+color: white
+border-radius: 8px
+padding: 10px 20px
+font-weight: 600
+hover: var(--green-500), slight lift shadow
+active: var(--green-700)
+```
+
+**Buttons — Secondary/Ghost:**
+```
+background: transparent
+border: 1px solid var(--border)
+color: var(--text-secondary)
+hover: border-color var(--green-600), color var(--text-primary)
+```
+
+**Inputs:**
+```
+background: var(--bg-deep)
+border: 1px solid var(--border)
+border-radius: 8px
+color: var(--text-primary)
+placeholder: var(--text-muted)
+focus: border-color var(--green-500), box-shadow: 0 0 0 3px var(--glow-green)
+```
+
+**Badges:**
+```
+ADMIN:      background var(--green-900), color var(--green-300)
+AUDITOR:    background var(--info)/10%, color var(--info)
+VIEWER:     background var(--text-muted)/20%, color var(--text-muted)
+COMPLIANT:  background var(--success)/15%, color var(--success)
+NON_COMPLIANT: background var(--error)/15%, color var(--error)
+PASS:       green
+FAIL:       red
+NOT_FOUND:  gray
+NEEDS_REVIEW: amber
+```
+
+**Status badges for documents:**
+```
+UPLOADED:        gray
+PROCESSING:      blue, with pulse animation
+MATCHED:         cyan
+UNMATCHED:       amber
+UNDER_REVIEW:    purple
+COMPLIANT:       green
+NON_COMPLIANT:   red
+```
+
+### Sidebar
+
+```
+Width: 260px
+Background: var(--bg-deep) — darker than main content
+Border-right: 1px solid var(--border)
+Logo section: Shield icon + "Compliance Desk" in Instrument Serif
+Nav items: rounded, icon + label, green highlight on active
+Active indicator: left green bar + green text + subtle green bg
+User section at bottom: avatar circle + name + role badge + sign out
+```
+
+### Animations
+
+```
+Page transitions: fadeIn + slight upward slide (0.3s ease)
+Card hover: translateY(-2px) + border glow (0.2s ease)
+Score ring: animate from 0 to value on mount (1s ease-out)
+Table rows: staggered fade-in on load (0.05s delay between rows)
+Status badge (PROCESSING): subtle pulse animation
+Button hover: letter-spacing expansion on primary buttons
+Modal: backdrop fade + scale from 0.95 to 1 (0.2s ease)
+Skeleton loading: shimmer effect with green tint
+```
+
+### Spacing System
+
+```
+Base unit: 4px
+  xs: 4px    (tight gaps)
+  sm: 8px    (within components)
+  md: 16px   (component padding)
+  lg: 24px   (section gaps)
+  xl: 32px   (page sections)
+  2xl: 48px  (major divisions)
+  3xl: 64px  (page margins)
+```
+
+---
+
+## FRONTEND PHASE BREAKDOWN
+
+Here is how I would split the frontend into buildable phases:
+
+| Phase | Name | Screens | Complexity |
+|-------|------|---------|------------|
+| **F1** | Design System & Auth | Login, Register, root layout, green theme, shadcn setup | Medium |
+| **F2** | App Shell & Sidebar | Dashboard layout, sidebar, topbar, auth guard, route protection | Low |
+| **F3** | Checklist List & Builder | Checklists list, Create/Edit checklist (the complex builder) | **High** |
+| **F4** | Document Upload & List | Document upload modal/dropzone, documents list table | Medium |
+| **F5** | Document Detail & Compliance | Document detail, match modal, compliance results table, score rings | **High** |
+| **F6** | Reports & PDF Download | Reports list, PDF download integration | Medium |
+| **F7** | Dashboard Stats & Activity | Stats cards, charts/rings, activity feed | Medium |
+| **F8** | Admin & Settings | User management table, invite modal, role change, change password, profile dropdown | Medium |
+
+---
+
+**What do you want to do from here?**
+
+1. **Start building F1 now** — I generate the prompt for your vibe coder with the green theme baked in
+2. **Adjust the design** — you want different colors, different font, different vibe
+3. **Adjust the phases** — combine or split differently
+4. **Something else** you want to discuss first

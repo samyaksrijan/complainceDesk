@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ORGANIZATIONS ====================
+
+model Organization {
+  id            String         @id @default(cuid())
+  name          String
+  users         User[]
+  checklists    Checklist[]
+  documents     Document[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+  reports       Report[]
+  createdAt     DateTime       @default(now())
+}
+
+// ==================== USERS ====================
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         Role          @default(VIEWER)
+  org          Organization  @relation(fields: [orgId], references: [id])
+  orgId        String
+  documents     Document[]     @relation("UploadedDocuments")
+  checklists    Checklist[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+  reports       Report[]
+  passwordChangedAt DateTime?
+  lastLoginAt  DateTime?
+  status       UserStatus    @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+
+  @@index([orgId])
+  @@index([email])
+  @@index([status])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum Role {
+  ADMIN
+  AUDITOR
+  VIEWER
+}
+
+// ==================== CHECKLISTS ====================
+
+model Checklist {
+  id               String             @id @default(cuid())
+  name             String
+  description      String?
+  category         String?
+  tags             String[]           @default([])
+  sourceType       SourceType         @default(MANUAL)
+  sourceDocument   Document?          @relation("SourceDocument", fields: [sourceDocumentId], references: [id])
+  sourceDocumentId String?
+  org              Organization       @relation(fields: [orgId], references: [id])
+  orgId            String
+  createdBy        User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById      String?
+  items            ChecklistItem[]
+  matchResults     ComplianceResult[]
+  isTemplate       Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  matchedDocuments Document[]         @relation("MatchedChecklist")
+  reports          Report[]
+
+  @@index([orgId])
+  @@index([category])
+  @@index([isTemplate])
+}
+
+enum SourceType {
+  TEMPLATE
+  SCANNED
+  MANUAL
+}
+
+model ChecklistItem {
+  id             String    @id @default(cuid())
+  checklist      Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklistId    String
+  fieldName      String
+  fieldType      FieldType
+  unit           String?
+  condition      Condition
+  thresholdValue Json
+  options        Json?
+  sourceText     String?
+  confidence     Float?
+  regulationRef  String?
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  resultItems ComplianceResultItem[]
+
+  @@index([checklistId])
+}
+
+enum FieldType {
+  NUMBER
+  BOOLEAN
+  TEXT
+  SELECT
+}
+
+enum Condition {
+  LESS_THAN
+  GREATER_THAN
+  EQUALS
+  RANGE
+  MUST_BE_PRESENT
+  MUST_CONTAIN
+  IS_TRUE
+}
+
+// ==================== DOCUMENTS ====================
+
+model Document {
+  id                  String             @id @default(cuid())
+  name                String
+  fileUrl             String
+  fileType            String
+  extractedText       String?            @db.Text
+  status              DocumentStatus     @default(UPLOADED)
+  matchedChecklist    Checklist?         @relation("MatchedChecklist", fields: [matchedChecklistId], references: [id])
+  matchedChecklistId  String?
+  org                 Organization       @relation(fields: [orgId], references: [id])
+  orgId               String
+  uploadedBy          User?              @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById        String?
+  sourceForChecklists Checklist[]        @relation("SourceDocument")
+  results             ComplianceResult[]
+  createdAt           DateTime           @default(now())
+
+  @@index([orgId])
+  @@index([status])
+  @@index([matchedChecklistId])
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  MATCHED
+  UNMATCHED
+  UNDER_REVIEW
+  COMPLIANT
+  NON_COMPLIANT
+}
+
+// ==================== COMPLIANCE RESULTS ====================
+
+model ComplianceResult {
+  id            String                 @id @default(cuid())
+  document      Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId    String
+  checklist     Checklist              @relation(fields: [checklistId], references: [id])
+  checklistId   String
+  overallScore  Float
+  totalItems    Int
+  passedItems   Int
+  failedItems   Int
+  notFoundItems Int
+  summary       String?                @db.Text
+  items         ComplianceResultItem[]
+  generatedAt   DateTime               @default(now())
+
+  @@index([documentId])
+  @@index([checklistId])
+}
+
+model ComplianceResultItem {
+  id              String           @id @default(cuid())
+  result          ComplianceResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  resultId        String
+  checklistItem   ChecklistItem    @relation(fields: [checklistItemId], references: [id])
+  checklistItemId String
+  status          ResultStatus
+  extractedValue  String?
+  sourceExcerpt   String?          @db.Text
+  notes           String?
+
+  @@index([resultId])
+}
+
+enum ResultStatus {
+  PASS
+  FAIL
+  NOT_FOUND
+  NEEDS_REVIEW
+}
+
+// ==================== ACTIVITY LOGS ====================
+
+model ActivityLog {
+  id           String       @id @default(cuid())
+  org          Organization @relation(fields: [orgId], references: [id])
+  orgId        String
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String?
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([createdAt])
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id          String           @id @default(cuid())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  org         Organization     @relation(fields: [orgId], references: [id])
+  orgId       String
+  type        NotificationType
+  title       String
+  message     String           @db.Text
+  actorId     String?
+  actorName   String?
+  targetType  String?
+  targetId    String?
+  targetName  String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  ANALYSIS_COMPLETE
+  ANALYSIS_FAILED
+  DOCUMENT_UPLOADED
+  DOCUMENT_DELETED
+  CHECKLIST_CREATED
+  CHECKLIST_UPDATED
+  ROLE_CHANGED
+  USER_INVITED
+  WEEKLY_DIGEST
+  SYSTEM
+}
+
+// ==================== REPORTS ====================
+
+model Report {
+  id                     String       @id @default(cuid())
+  name                   String
+  status                 ReportStatus @default(GENERATING)
+  org                    Organization @relation(fields: [orgId], references: [id])
+  orgId                  String
+  generatedBy            User         @relation(fields: [generatedById], references: [id])
+  generatedById          String
+  checklist              Checklist?   @relation(fields: [checklistId], references: [id])
+  checklistId            String?
+  dateRangeFrom          DateTime?
+  dateRangeTo            DateTime?
+  includeDetails         Boolean      @default(true)
+  includeRecommendations Boolean      @default(true)
+  documentCount          Int          @default(0)
+  averageScore           Float        @default(0)
+  content                Json?
+  createdAt              DateTime     @default(now())
+  completedAt            DateTime?
+
+  @@index([orgId])
+  @@index([generatedById])
+  @@index([checklistId])
+  @@index([status])
+}
+
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+}
+
+

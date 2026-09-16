@@ -1,0 +1,2222 @@
+# Product Requirements Document (PRD)
+
+## SaaS Compliance Desk
+
+**Version**: 1.0
+**Date**: September 2025
+**Status**: Ready for Development
+
+---
+
+## Table of Contents
+
+1. [Product Overview](#1-product-overview)
+2. [Problem Statement](#2-problem-statement)
+3. [Target Users](#3-target-users)
+4. [Core Concept](#4-core-concept)
+5. [Tech Stack](#5-tech-stack)
+6. [System Architecture](#6-system-architecture)
+7. [Database Schema](#7-database-schema)
+8. [Authentication & Authorization](#8-authentication--authorization)
+9. [Feature Specifications](#9-feature-specifications)
+10. [API Contract](#10-api-contract)
+11. [LLM Integration](#11-llm-integration)
+12. [UI/UX Specifications](#12-uiux-specifications)
+13. [Development Phases](#13-development-phases)
+14. [Environment Variables](#14-environment-variables)
+15. [File Structure](#15-file-structure)
+16. [Acceptance Criteria](#16-acceptance-criteria)
+
+---
+
+## 1. Product Overview
+
+### What is Compliance Desk?
+
+Compliance Desk is a SaaS web application that helps organizations manage regulatory compliance. Companies upload audit documents or compliance reports, and the system extracts text, matches documents against compliance checklists, evaluates compliance status, and generates detailed reports with pass/fail results, scores, and summaries.
+
+The system uses LLM-powered scanning to auto-generate checklist structures from compliance regulation documents, with a human-in-the-loop review process to verify and correct extracted fields.
+
+### One-line Summary
+
+> Upload documents. Scan against checklists. Get compliance reports.
+
+### Key Differentiators
+
+- **AI-assisted checklist creation**: Upload a regulation PDF, and the system extracts structured checklist fields automatically
+- **Human-in-the-loop review**: AI suggestions are always editable before saving
+- **Reusable checklists**: Created checklists are saved and auto-matched to future documents
+- **Structured compliance evaluation**: Every checklist item gets a definitive pass/fail/not-found status with source evidence
+
+---
+
+## 2. Problem Statement
+
+Organizations deal with multiple compliance requirements — building safety, fire codes, environmental regulations, data privacy laws, ISO standards. Verifying compliance typically involves:
+
+- Manually reading dense regulation documents
+- Manually cross-referencing audit reports against regulations
+- Tracking compliance status across multiple documents and standards
+- No centralized system for managing checklists, documents, and results
+
+**Compliance Desk automates this workflow**: scan regulations into checklists, upload audit documents, run automated compliance checks, and generate structured reports.
+
+---
+
+## 3. Target Users
+
+### Roles
+
+| Role | Description | Permissions |
+|---|---|---|
+| **Admin** | Organization administrator. Manages users, checklists, and all documents. | Full access: create/edit/delete everything, manage users, view all reports |
+| **Auditor** | Compliance officer or auditor who uploads documents and runs checks. | Upload documents, create/edit checklists, run compliance checks, view all reports |
+| **Viewer** | Stakeholder who needs to see compliance status. | View dashboard, view reports (read-only). Cannot upload or edit. |
+
+### User Journey Summary
+
+```
+Admin registers org → Creates/invites users →
+Auditor uploads compliance regulation → System scans into checklist →
+Auditor reviews and saves checklist →
+Auditor uploads audit document → System matches to checklist →
+System runs compliance check → Report generated →
+Viewer reviews report on dashboard
+```
+
+---
+
+## 4. Core Concept
+
+### The Two Document Types
+
+| Type | What it is | Example | What happens with it |
+|---|---|---|---|
+| **Compliance Document** (Checklist Source) | A regulation, standard, or compliance requirement document | "Building Safety Code 2024.pdf" | Scanned by LLM to create a checklist template |
+| **Audit Document** (Audit Source) | An inspection report, audit result, or evidence document | "Skyline Tower Inspection Report.pdf" | Checked against a compliance checklist to produce pass/fail results |
+
+### The Core Loop
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  COMPLIANCE DOC ──→ SCAN ──→ REVIEW ──→ SAVE CHECKLIST         │
+│                                          │                      │
+│                                          ▼                      │
+│  AUDIT DOC ──→ UPLOAD ──→ MATCH ──→ RUN CHECK ──→ REPORT       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Tech Stack
+
+| Layer | Technology | Version / Notes |
+|---|---|---|
+| **Framework** | Next.js (App Router) | 14.x, TypeScript |
+| **Language** | TypeScript | Strict mode |
+| **Database** | PostgreSQL | 15+ |
+| **ORM** | Prisma | Latest |
+| **Auth** | NextAuth.js | Credentials provider, JWT sessions |
+| **Password Hashing** | bcryptjs | — |
+| **Validation** | Zod | Schema validation on all API inputs |
+| **PDF Parsing** | pdf-parse | Digital PDF text extraction |
+| **OCR** | Tesseract.js | Scanned PDF / image text extraction |
+| **DOCX Parsing** | mammoth | DOCX text extraction |
+| **LLM (Primary)** | Groq API | Model: llama-3.3-70b-versatile |
+| **LLM (Fallback)** | Google Gemini API | gemini-1.5-flash or gemini-2.0-flash |
+| **UI Framework** | Tailwind CSS | Latest |
+| **UI Components** | shadcn/ui | Latest |
+| **File Upload (FE)** | react-dropzone | Drag-and-drop |
+| **Charts** | Recharts | Dashboard visualizations |
+| **PDF Export** | @react-pdf/renderer | Report PDF generation |
+| **File Storage** | Local filesystem | `/uploads` directory (dev), abstracted for S3 swap later |
+
+### Dev Environment
+
+| Tool | Purpose |
+|---|---|
+| Docker | PostgreSQL container |
+| Node.js | 18+ |
+| npm or pnpm | Package manager |
+| ts-node | Running test scripts |
+
+---
+
+## 6. System Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         FRONTEND                                │
+│                    Next.js (App Router)                          │
+│                                                                 │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│  │Dashboard │ │Documents │ │Checklists│ │ Reports  │          │
+│  │  Page    │ │  Pages   │ │  Pages   │ │  Pages   │          │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘          │
+│       └─────────────┴────────────┴─────────────┘                │
+│                          │ HTTP / API calls                     │
+└──────────────────────────┼──────────────────────────────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────────────┐
+│                      BACKEND                                    │
+│                 Next.js API Routes                               │
+│                                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │   Auth   │  │Document  │  │Checklist │  │Compliance│       │
+│  │ Service  │  │ Service  │  │ Service  │  │  Engine  │       │
+│  └──────────┘  └─────┬────┘  └─────┬────┘  └──────────┘       │
+│                       │            │                            │
+│                       ▼            ▼                            │
+│               ┌──────────┐  ┌──────────┐                        │
+│               │   OCR /  │  │   LLM    │                        │
+│               │  Text    │  │ Service  │                        │
+│               │Extraction│  │ (Groq +  │                        │
+│               │          │  │  Gemini) │                        │
+│               └──────────┘  └──────────┘                        │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐                             │
+│  │  PostgreSQL  │  │    File      │                             │
+│  │   Database   │  │   Storage    │                             │
+│  │   (Prisma)   │  │  (/uploads)  │                             │
+│  └──────────────┘  └──────────────┘                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow
+
+```
+Browser → Next.js Middleware (auth check) → API Route →
+  Service Layer (business logic) →
+    Prisma (database) + External APIs (LLM/OCR) →
+      Response → Frontend renders
+```
+
+---
+
+## 7. Database Schema
+
+### Entity Relationship Diagram
+
+```
+Organization 1──N User
+Organization 1──N Checklist
+Organization 1──N Document
+User 1──N Document (uploadedBy)
+User 1──N Checklist (createdBy)
+Checklist 1──N ChecklistItem
+Checklist 1──N ComplianceResult
+Document 1──N ComplianceResult
+ComplianceResult 1──N ComplianceResultItem
+ChecklistItem 1──N ComplianceResultItem
+Document N──1 Checklist (matchedChecklist)
+Organization 1──N ActivityLog
+```
+
+### Prisma Schema
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ORGANIZATIONS ====================
+
+model Organization {
+  id         String         @id @default(cuid())
+  name       String
+  users      User[]
+  checklists Checklist[]
+  documents  Document[]
+  activityLogs ActivityLog[]
+  createdAt  DateTime       @default(now())
+}
+
+// ==================== USERS ====================
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(VIEWER)
+  org          Organization   @relation(fields: [orgId], references: [id])
+  orgId        String
+  documents    Document[]     @relation("UploadedDocuments")
+  checklists   Checklist[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime       @default(now())
+
+  @@index([orgId])
+  @@index([email])
+}
+
+enum Role {
+  ADMIN
+  AUDITOR
+  VIEWER
+}
+
+// ==================== CHECKLISTS ====================
+
+model Checklist {
+  id               String         @id @default(cuid())
+  name             String
+  description      String?
+  category         String?        // "building", "fire", "environmental", "data_privacy"
+  tags             String[]       @default([])
+  sourceType       SourceType     @default(MANUAL)
+  sourceDocument   Document?      @relation("SourceDocument", fields: [sourceDocumentId], references: [id])
+  sourceDocumentId String?
+  org              Organization   @relation(fields: [orgId], references: [id])
+  orgId            String
+  createdBy        User           @relation(fields: [createdById], references: [id])
+  createdById      String
+  items            ChecklistItem[]
+  matchResults     ComplianceResult[]
+  isTemplate       Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([orgId])
+  @@index([category])
+  @@index([isTemplate])
+}
+
+enum SourceType {
+  TEMPLATE
+  SCANNED
+  MANUAL
+}
+
+model ChecklistItem {
+  id              String      @id @default(cuid())
+  checklist       Checklist   @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklistId     String
+  fieldName       String      // "Building Height"
+  fieldType       FieldType
+  unit            String?     // "meters", "kN/m²", "persons"
+  condition       Condition
+  thresholdValue  Json        // number | string | boolean | [min, max]
+  options         Json?       // ["Class A", "Class B"] — only for SELECT type
+  sourceText      String?     // original sentence from scanned document
+  confidence      Float?      // 0.0–1.0, only set for SCANNED items
+  regulationRef   String?     // "Section 4.1", "ISO 27001 A.5"
+  sortOrder       Int         @default(0)
+  createdAt       DateTime    @default(now())
+
+  resultItems     ComplianceResultItem[]
+
+  @@index([checklistId])
+}
+
+enum FieldType {
+  NUMBER
+  BOOLEAN
+  TEXT
+  SELECT
+}
+
+enum Condition {
+  LESS_THAN
+  GREATER_THAN
+  EQUALS
+  RANGE
+  MUST_BE_PRESENT
+  MUST_CONTAIN
+  IS_TRUE
+}
+
+// ==================== DOCUMENTS ====================
+
+model Document {
+  id                  String         @id @default(cuid())
+  name                String
+  fileUrl             String         // path: /uploads/orgId/timestamp-filename
+  fileType            String         // "pdf", "docx", "png", "jpg", "txt"
+  extractedText       String?        @db.Text
+  status              DocumentStatus @default(UPLOADED)
+  matchedChecklist    Checklist?     @relation("MatchedChecklist", fields: [matchedChecklistId], references: [id])
+  matchedChecklistId  String?
+  org                 Organization   @relation(fields: [orgId], references: [id])
+  orgId               String
+  uploadedBy          User           @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+  uploadedById        String
+  sourceForChecklists Checklist[]    @relation("SourceDocument")
+  results             ComplianceResult[]
+  createdAt           DateTime       @default(now())
+
+  @@index([orgId])
+  @@index([status])
+  @@index([matchedChecklistId])
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  MATCHED
+  UNMATCHED
+  UNDER_REVIEW
+  COMPLIANT
+  NON_COMPLIANT
+}
+
+// ==================== COMPLIANCE RESULTS ====================
+
+model ComplianceResult {
+  id            String   @id @default(cuid())
+  document      Document @relation(fields: [documentId], references: [id])
+  documentId    String
+  checklist     Checklist @relation(fields: [checklistId], references: [id])
+  checklistId   String
+  overallScore  Float    // 0–100 percentage
+  totalItems    Int
+  passedItems   Int
+  failedItems   Int
+  notFoundItems Int
+  summary       String?  @db.Text // LLM-generated summary
+  items         ComplianceResultItem[]
+  generatedAt   DateTime @default(now())
+
+  @@index([documentId])
+  @@index([checklistId])
+}
+
+model ComplianceResultItem {
+  id              String          @id @default(cuid())
+  result          ComplianceResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  resultId        String
+  checklistItem   ChecklistItem   @relation(fields: [checklistItemId], references: [id])
+  checklistItemId String
+  status          ResultStatus
+  extractedValue  String?         // actual value found in document
+  sourceExcerpt   String?         @db.Text // relevant paragraph from document
+  notes           String?         // LLM-generated note about this item
+
+  @@index([resultId])
+}
+
+enum ResultStatus {
+  PASS
+  FAIL
+  NOT_FOUND
+  NEEDS_REVIEW
+}
+
+// ==================== ACTIVITY LOGS ====================
+
+model ActivityLog {
+  id           String       @id @default(cuid())
+  org          Organization @relation(fields: [orgId], references: [id])
+  orgId        String
+  user         User         @relation(fields: [userId], references: [id])
+  userId       String
+  action       String       // "document.uploaded", "checklist.created", etc.
+  resourceType String       // "document", "checklist", "user"
+  resourceId   String?
+  metadata     Json?        // additional context
+  createdAt    DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([createdAt])
+}
+```
+
+### Indexes Summary
+
+| Table | Index | Purpose |
+|---|---|---|
+| User | orgId | Filter users by org |
+| User | email | Login lookup |
+| Checklist | orgId | Filter checklists by org |
+| Checklist | category | Filter by category |
+| Checklist | isTemplate | Separate templates from custom |
+| ChecklistItem | checklistId | Load items for a checklist |
+| Document | orgId | Filter documents by org |
+| Document | status | Filter by status |
+| Document | matchedChecklistId | Find docs matched to a checklist |
+| ComplianceResult | documentId | Get results for a document |
+| ComplianceResult | checklistId | Get results for a checklist |
+| ActivityLog | orgId | Filter logs by org |
+| ActivityLog | createdAt | Sort by recency |
+
+---
+
+## 8. Authentication & Authorization
+
+### Auth Flow
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Register    │     │    Login     │     │   Session    │
+│              │     │              │     │              │
+│ email        │     │ email        │     │ Returns:     │
+│ password     │     │ password     │     │ - userId     │
+│ name         │     │              │     │ - email      │
+│ orgName      │     │              │     │ - name       │
+│              │     │              │     │ - role       │
+│ Creates:     │     │ Verifies:    │     │ - orgId      │
+│ - Org        │     │ - email      │     │ - orgName    │
+│ - User       │     │ - password   │     │              │
+│ (ADMIN role) │     │ (bcrypt)     │     │ Stored in    │
+│              │     │              │     │ JWT cookie   │
+│ Returns:     │     │ Returns:     │     │              │
+│ - session    │     │ - session    │     │ Refreshed    │
+│              │     │              │     │ on each      │
+│              │     │              │     │ request      │
+└──────────────┘     └──────────────┘     └──────────────┘
+```
+
+### NextAuth Configuration
+
+```typescript
+// lib/auth.ts
+
+import NextAuth from "next-auth"
+import CredentialsProvider from "next-auth/providers/credentials"
+import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
+
+export const authOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+          include: { org: true },
+        })
+
+        if (!user) throw new Error("No user found")
+
+        const isValid = await bcrypt.compare(
+          credentials.password,
+          user.passwordHash
+        )
+        if (!isValid) throw new Error("Invalid password")
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          orgId: user.orgId,
+          orgName: user.org.name,
+        }
+      },
+    }),
+  ],
+  session: { strategy: "jwt" },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.userId = user.id
+        token.role = user.role
+        token.orgId = user.orgId
+        token.orgName = user.orgName
+      }
+      return token
+    },
+    async session({ session, token }) {
+      session.user.id = token.userId
+      session.user.role = token.role
+      session.user.orgId = token.orgId
+      session.user.orgName = token.orgName
+      return session
+    },
+  },
+  pages: {
+    signIn: "/login",
+  },
+}
+```
+
+### Role-Based Access Control Matrix
+
+| Resource / Action | ADMIN | AUDITOR | VIEWER |
+|---|---|---|---|
+| View dashboard | YES | YES | YES |
+| View documents list | YES | YES | YES |
+| View document detail | YES | YES | YES |
+| Upload document | YES | YES | NO |
+| Delete document | YES | NO | NO |
+| Match document to checklist | YES | YES | NO |
+| Run compliance check | YES | YES | NO |
+| View compliance reports | YES | YES | YES |
+| Export PDF report | YES | YES | YES |
+| View checklists | YES | YES | YES |
+| Create checklist (manual) | YES | YES | NO |
+| Create checklist (scan) | YES | YES | NO |
+| Edit checklist | YES | YES | NO |
+| Delete checklist | YES | NO | NO |
+| Clone template | YES | YES | NO |
+| View users | YES | NO | NO |
+| Invite user | YES | NO | NO |
+| Change user role | YES | NO | NO |
+| Remove user | YES | NO | NO |
+| View activity logs | YES | YES | YES |
+
+### RBAC Middleware
+
+```typescript
+// lib/rbac.ts
+
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server"
+import { Role } from "@prisma/client"
+
+type Handler = (req: Request, context: { user: SessionUser }) => Promise<NextResponse>
+
+export function withAuth(handler: Handler, allowedRoles?: Role[]) {
+  return async (req: Request, context?: any) => {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (allowedRoles && !allowedRoles.includes(session.user.role as Role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    return handler(req, { user: session.user })
+  }
+}
+
+// Usage:
+// export const POST = withAuth(handler, [Role.ADMIN, Role.AUDITOR])
+// export const GET = withAuth(handler) // any authenticated user
+```
+
+---
+
+## 9. Feature Specifications
+
+### 9.1 Authentication
+
+#### Register
+
+**Endpoint**: `POST /api/auth/register`
+
+**Input**:
+```json
+{
+  "email": "admin@company.com",
+  "password": "securePass123",
+  "name": "John Doe",
+  "orgName": "Acme Corp"
+}
+```
+
+**Behavior**:
+1. Validate all fields present and valid (Zod schema)
+2. Check email not already taken
+3. Create Organization record
+4. Hash password with bcrypt (10 rounds)
+5. Create User with ADMIN role
+6. Return session
+
+**Validation Rules**:
+- Email: valid email format
+- Password: minimum 8 characters
+- Name: minimum 2 characters
+- OrgName: minimum 2 characters
+
+#### Login
+
+**Endpoint**: `POST /api/auth/login`
+
+**Input**:
+```json
+{
+  "email": "admin@company.com",
+  "password": "securePass123"
+}
+```
+
+**Behavior**:
+1. Find user by email
+2. Compare password with bcrypt
+3. Return JWT session via NextAuth
+
+**Error Responses**:
+- 401: Invalid credentials
+- 400: Missing fields
+
+---
+
+### 9.2 Document Management
+
+#### Upload Document
+
+**Endpoint**: `POST /api/documents/upload`
+
+**Input**: Multipart form data
+- `file`: PDF, DOCX, PNG, JPG, or TXT file (max 10MB)
+- `name`: Document name (string)
+
+**Behavior**:
+1. Validate file type and size
+2. Save file to `/uploads/{orgId}/{timestamp}-{originalFilename}`
+3. Create Document record with status UPLOADED
+4. Trigger text extraction pipeline:
+   - PDF → `pdf-parse`
+   - DOCX → `mammoth.extractRawText`
+   - PNG/JPG → `tesseract.js`
+   - TXT → `fs.readFile`
+5. Store extracted text in database
+6. Update status → UNMATCHED
+7. Log activity: `document.uploaded`
+8. Return document record
+
+**Error Handling**:
+- 400: Invalid file type, file too large
+- 500: Extraction failure (still save document, mark as UPLOADED with error note)
+
+#### List Documents
+
+**Endpoint**: `GET /api/documents`
+
+**Query Params**:
+- `status`: Filter by DocumentStatus (optional)
+- `search`: Search by name (optional)
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 20)
+
+**Response**:
+```json
+{
+  "documents": [
+    {
+      "id": "doc_abc123",
+      "name": "Building Audit Q1",
+      "fileType": "pdf",
+      "status": "UNMATCHED",
+      "uploadedBy": { "name": "John Doe" },
+      "createdAt": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 45,
+    "totalPages": 3
+  }
+}
+```
+
+#### Get Document Detail
+
+**Endpoint**: `GET /api/documents/{id}`
+
+**Response**:
+```json
+{
+  "id": "doc_abc123",
+  "name": "Building Audit Q1",
+  "fileUrl": "/uploads/org_xyz/1705312200-audit.pdf",
+  "fileType": "pdf",
+  "extractedText": "ANNUAL BUILDING INSPECTION REPORT\nProperty: Skyline Tower...",
+  "status": "MATCHED",
+  "matchedChecklist": {
+    "id": "cl_456",
+    "name": "Building Safety Compliance",
+    "itemsCount": 11
+  },
+  "uploadedBy": { "id": "user_1", "name": "John Doe" },
+  "results": [
+    {
+      "id": "res_789",
+      "overallScore": 85.7,
+      "generatedAt": "2025-01-15T11:00:00Z"
+    }
+  ],
+  "createdAt": "2025-01-15T10:30:00Z"
+}
+```
+
+#### Delete Document
+
+**Endpoint**: `DELETE /api/documents/{id}`
+
+**Permissions**: ADMIN only
+
+**Behavior**:
+1. Delete file from filesystem
+2. Delete document record (cascade: results, result items)
+3. Log activity: `document.deleted`
+4. Return 204
+
+---
+
+### 9.3 Checklist Management
+
+#### List Checklists
+
+**Endpoint**: `GET /api/checklists`
+
+**Query Params**:
+- `category`: Filter by category (optional)
+- `tags`: Filter by tag (optional, comma-separated)
+- `search`: Search by name (optional)
+- `isTemplate`: Filter templates vs custom (optional)
+- `page`, `limit`: Pagination
+
+**Response**:
+```json
+{
+  "checklists": [
+    {
+      "id": "cl_123",
+      "name": "Building Safety Compliance",
+      "description": "Standard building safety requirements",
+      "category": "building",
+      "tags": ["safety", "structural"],
+      "sourceType": "TEMPLATE",
+      "isTemplate": true,
+      "itemsCount": 11,
+      "createdBy": { "name": "System" },
+      "createdAt": "2025-01-01T00:00:00Z"
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 8, "totalPages": 1 }
+}
+```
+
+#### Create Checklist
+
+**Endpoint**: `POST /api/checklists`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Input**:
+```json
+{
+  "name": "Building Safety Compliance",
+  "description": "Standard building safety requirements",
+  "category": "building",
+  "tags": ["safety", "structural"],
+  "isTemplate": false,
+  "items": [
+    {
+      "fieldName": "Building Height",
+      "fieldType": "NUMBER",
+      "unit": "meters",
+      "condition": "LESS_THAN",
+      "thresholdValue": 50,
+      "regulationRef": "Section 4.1",
+      "sortOrder": 1
+    },
+    {
+      "fieldName": "Fire Extinguisher Present",
+      "fieldType": "BOOLEAN",
+      "condition": "MUST_BE_PRESENT",
+      "thresholdValue": true,
+      "sortOrder": 2
+    },
+    {
+      "fieldName": "Wall Material",
+      "fieldType": "TEXT",
+      "condition": "MUST_CONTAIN",
+      "thresholdValue": "fire-rated",
+      "sortOrder": 3
+    },
+    {
+      "fieldName": "Emergency Exit Type",
+      "fieldType": "SELECT",
+      "condition": "EQUALS",
+      "thresholdValue": "staircase",
+      "options": ["staircase", "ramp", "elevator"],
+      "sortOrder": 4
+    },
+    {
+      "fieldName": "Load Capacity",
+      "fieldType": "NUMBER",
+      "unit": "kN/m²",
+      "condition": "RANGE",
+      "thresholdValue": [2.5, 10],
+      "sortOrder": 5
+    }
+  ]
+}
+```
+
+**Validation Rules**:
+- `name`: required, min 2 chars
+- `items`: required, array with at least 1 item
+- Each item:
+  - `fieldName`: required
+  - `fieldType`: required, enum
+  - `condition`: required, must be valid for the given `fieldType`
+  - `thresholdValue`: required, type must match `fieldType`
+- **Condition-Type Compatibility Matrix**:
+
+| fieldType | Allowed conditions |
+|---|---|
+| NUMBER | LESS_THAN, GREATER_THAN, EQUALS, RANGE |
+| BOOLEAN | IS_TRUE, MUST_BE_PRESENT |
+| TEXT | EQUALS, MUST_CONTAIN |
+| SELECT | EQUALS |
+
+**Behavior**:
+1. Validate input (Zod)
+2. Validate condition-type compatibility for each item
+3. Create Checklist + all ChecklistItems in a transaction
+4. Log activity: `checklist.created`
+5. Return created checklist with items
+
+#### Get Checklist Detail
+
+**Endpoint**: `GET /api/checklists/{id}`
+
+**Response**: Full checklist with all items sorted by `sortOrder`
+
+#### Update Checklist
+
+**Endpoint**: `PUT /api/checklists/{id}`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Input**: Same as create (partial updates allowed for metadata, full replacement for items)
+
+**Behavior**:
+1. Validate input
+2. If `items` provided: delete all existing items, insert new ones (transaction)
+3. Update metadata fields
+4. Log activity: `checklist.updated`
+5. Return updated checklist
+
+#### Delete Checklist
+
+**Endpoint**: `DELETE /api/checklists/{id}`
+
+**Permissions**: ADMIN only
+
+**Behavior**:
+1. Check no documents are actively matched to this checklist
+2. If matched documents exist: return 400 with error message
+3. Delete checklist (cascade: items)
+4. Log activity: `checklist.deleted`
+5. Return 204
+
+#### Clone Template
+
+**Endpoint**: `POST /api/checklists/{id}/clone`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Behavior**:
+1. Fetch template checklist + all items
+2. Create new checklist in user's org with all items copied
+3. `sourceType`: TEMPLATE, `isTemplate`: false
+4. Return cloned checklist
+
+---
+
+### 9.4 AI-Powered Checklist Scanning
+
+#### Scan Compliance Document
+
+**Endpoint**: `POST /api/scan/checklist`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Input** (one of):
+
+Option A — Upload file:
+```
+Content-Type: multipart/form-data
+file: <PDF/DOCX/image>
+```
+
+Option B — Provide raw text:
+```json
+{
+  "text": "BUILDING SAFETY REQUIREMENTS\n4.1 Height shall not exceed..."
+}
+```
+
+**Behavior**:
+1. If file: extract text using extraction pipeline
+2. Send text to LLM with structured extraction prompt
+3. Parse LLM response as JSON array
+4. Validate each item against expected schema
+5. Assign confidence scores
+6. Return extracted items (NOT saved to database yet)
+
+**Response**:
+```json
+{
+  "items": [
+    {
+      "field_name": "Building Height (Residential)",
+      "field_type": "number",
+      "unit": "meters",
+      "condition": "less_than",
+      "threshold_value": 50,
+      "source_text": "The total building height shall not exceed 50 meters for residential zones",
+      "confidence": 0.97,
+      "regulation_ref": "Section 4.1"
+    },
+    {
+      "field_name": "Fire Extinguisher Presence",
+      "field_type": "boolean",
+      "unit": null,
+      "condition": "must_be_present",
+      "threshold_value": true,
+      "source_text": "Fire extinguishers must be present on every floor",
+      "confidence": 0.99,
+      "regulation_ref": "Section 4.2"
+    }
+  ],
+  "raw_text_length": 1240,
+  "items_count": 11
+}
+```
+
+**Note**: The LLM returns snake_case field names. The frontend maps these to the ChecklistItem structure for the editor. When the user saves, the data is sent in the standard create checklist format (camelCase).
+
+---
+
+### 9.5 Compliance Engine
+
+#### Match Document to Checklist
+
+**Endpoint**: `POST /api/documents/{id}/match`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Input** (optional):
+```json
+{
+  "checklistId": "cl_123"
+}
+```
+
+**Behavior**:
+- If `checklistId` provided: manual match, skip auto-match
+- If no body: run auto-match:
+  1. Extract keywords from document text
+  2. Query org's checklists
+  3. Score each checklist by keyword/tag overlap
+  4. If top match score > threshold: set as match
+  5. If no confident match: return null (status stays UNMATCHED)
+- Update `document.matchedChecklistId`
+- Update `document.status` → MATCHED
+- Log activity: `document.matched`
+
+**Response**:
+```json
+{
+  "matched": true,
+  "checklistId": "cl_123",
+  "checklistName": "Building Safety Compliance",
+  "confidence": 0.92,
+  "matchType": "auto"
+}
+```
+
+Or if no match:
+```json
+{
+  "matched": false,
+  "suggestions": [
+    { "id": "cl_456", "name": "Fire Safety", "score": 0.45 },
+    { "id": "cl_789", "name": "Environmental", "score": 0.30 }
+  ]
+}
+```
+
+#### Run Compliance Check
+
+**Endpoint**: `POST /api/documents/{id}/check`
+
+**Permissions**: ADMIN, AUDITOR
+
+**Precondition**: Document must have a matched checklist
+
+**Behavior**:
+1. Fetch document with extracted text
+2. Fetch matched checklist with all items
+3. Call LLM to extract actual values from document for each checklist field
+4. Evaluate each item:
+
+| fieldType | condition | PASS when |
+|---|---|---|
+| NUMBER | LESS_THAN | extractedValue < thresholdValue |
+| NUMBER | GREATER_THAN | extractedValue > thresholdValue |
+| NUMBER | EQUALS | extractedValue == thresholdValue |
+| NUMBER | RANGE | thresholdValue[0] <= extractedValue <= thresholdValue[1] |
+| BOOLEAN | IS_TRUE | extractedValue == true |
+| BOOLEAN | MUST_BE_PRESENT | extractedValue == true |
+| TEXT | EQUALS | extractedValue.toLowerCase() == thresholdValue.toLowerCase() |
+| TEXT | MUST_CONTAIN | extractedValue.toLowerCase() contains thresholdValue.toLowerCase() |
+| SELECT | EQUALS | extractedValue in options list |
+
+5. If value not found in document: status = NOT_FOUND
+6. If value ambiguous or parse error: status = NEEDS_REVIEW
+7. Calculate score: `(passedItems / (totalItems - notFoundItems)) * 100`
+8. Generate LLM summary (2-3 sentences)
+9. Save ComplianceResult + ComplianceResultItems
+10. Update document status: score >= 100 → COMPLIANT, else NON_COMPLIANT
+11. Log activity: `document.checked`
+
+**Response**:
+```json
+{
+  "id": "res_789",
+  "overallScore": 85.7,
+  "totalItems": 7,
+  "passedItems": 6,
+  "failedItems": 1,
+  "notFoundItems": 0,
+  "summary": "Document passes 6 of 7 compliance checks. The only failure is related to fire resistance rating, which falls below the required 2-hour minimum at 1.5 hours.",
+  "items": [
+    {
+      "checklistItemId": "item_1",
+      "fieldName": "Building Height",
+      "status": "PASS",
+      "expected": "less_than 50 meters",
+      "extractedValue": "42",
+      "sourceExcerpt": "Building height: 42 meters (measured from ground level)",
+      "notes": null
+    },
+    {
+      "checklistItemId": "item_7",
+      "fieldName": "Fire Resistance Rating",
+      "status": "FAIL",
+      "expected": "greater_than 2 hours",
+      "extractedValue": "1.5",
+      "sourceExcerpt": "Fire resistance rating: 1.5 hours (wall material test)",
+      "notes": "Below minimum requirement of 2 hours"
+    }
+  ],
+  "generatedAt": "2025-01-15T11:00:00Z"
+}
+```
+
+#### Get Compliance Results
+
+**Endpoint**: `GET /api/documents/{id}/results`
+
+**Response**: Same as above (latest result for the document)
+
+#### Export PDF Report
+
+**Endpoint**: `GET /api/documents/{id}/results/pdf`
+
+**Response**: PDF file (`Content-Type: application/pdf`)
+
+**PDF Contents**:
+- Header: Organization name, report title
+- Document info: name, checklist name, date
+- Score: large visual indicator
+- Summary: LLM-generated text
+- Results table: all items with status, expected, found, excerpt
+- Footer: generation timestamp
+
+---
+
+### 9.6 Dashboard
+
+#### Get Dashboard Stats
+
+**Endpoint**: `GET /api/dashboard/stats`
+
+**Permissions**: All roles
+
+**Response**:
+```json
+{
+  "totalDocuments": 45,
+  "complianceRate": 73.3,
+  "activeChecklists": 8,
+  "pendingReviews": 5,
+  "breakdown": {
+    "compliant": 22,
+    "nonCompliant": 13,
+    "pending": 10
+  },
+  "byCategory": [
+    { "category": "building", "avgScore": 82.5, "docCount": 15 },
+    { "category": "fire", "avgScore": 91.2, "docCount": 12 },
+    { "category": "environmental", "avgScore": 67.8, "docCount": 8 }
+  ]
+}
+```
+
+#### Get Recent Activity
+
+**Endpoint**: `GET /api/dashboard/recent-activity`
+
+**Query Params**: `limit` (default: 20)
+
+**Response**:
+```json
+{
+  "activities": [
+    {
+      "id": "log_1",
+      "action": "document.uploaded",
+      "resourceType": "document",
+      "resourceId": "doc_123",
+      "resourceName": "Building Audit Q1",
+      "user": { "name": "John Doe", "role": "AUDITOR" },
+      "createdAt": "2025-01-15T10:30:00Z"
+    },
+    {
+      "id": "log_2",
+      "action": "checklist.created",
+      "resourceType": "checklist",
+      "resourceId": "cl_456",
+      "resourceName": "ISO 27001 Basics",
+      "user": { "name": "Jane Smith", "role": "ADMIN" },
+      "createdAt": "2025-01-15T09:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 9.7 Admin User Management
+
+**Permissions**: ADMIN only
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/admin/users` | GET | List all users in org |
+| `/api/admin/users/invite` | POST | Create user in org (body: email, name, role) |
+| `/api/admin/users/{id}/role` | PUT | Change user role (body: role) |
+| `/api/admin/users/{id}` | DELETE | Remove user from org |
+
+**Invite User Behavior**:
+1. Generate random temporary password
+2. Create user with specified role
+3. Return temporary password (admin shares with user)
+4. (Optional: email sending in future)
+
+---
+
+## 10. API Contract
+
+### Complete Route Table
+
+| Route | Method | Auth | Roles | Description |
+|---|---|---|---|---|
+| `/api/auth/register` | POST | No | — | Register org + admin |
+| `/api/auth/login` | POST | No | — | Login |
+| `/api/auth/session` | GET | Yes | All | Get current session |
+| `/api/documents` | GET | Yes | All | List documents |
+| `/api/documents/upload` | POST | Yes | Admin, Auditor | Upload document |
+| `/api/documents/{id}` | GET | Yes | All | Get document detail |
+| `/api/documents/{id}` | DELETE | Yes | Admin | Delete document |
+| `/api/documents/{id}/match` | POST | Yes | Admin, Auditor | Match to checklist |
+| `/api/documents/{id}/check` | POST | Yes | Admin, Auditor | Run compliance check |
+| `/api/documents/{id}/results` | GET | Yes | All | Get compliance results |
+| `/api/documents/{id}/results/pdf` | GET | Yes | All | Export PDF |
+| `/api/checklists` | GET | Yes | All | List checklists |
+| `/api/checklists` | POST | Yes | Admin, Auditor | Create checklist |
+| `/api/checklists/{id}` | GET | Yes | All | Get checklist detail |
+| `/api/checklists/{id}` | PUT | Yes | Admin, Auditor | Update checklist |
+| `/api/checklists/{id}` | DELETE | Yes | Admin | Delete checklist |
+| `/api/checklists/{id}/clone` | POST | Yes | Admin, Auditor | Clone template |
+| `/api/scan/checklist` | POST | Yes | Admin, Auditor | Scan doc into checklist |
+| `/api/scan/extract-values` | POST | Yes | Admin, Auditor | Extract values from doc |
+| `/api/dashboard/stats` | GET | Yes | All | Dashboard statistics |
+| `/api/dashboard/recent-activity` | GET | Yes | All | Activity feed |
+| `/api/admin/users` | GET | Yes | Admin | List org users |
+| `/api/admin/users/invite` | POST | Yes | Admin | Invite/create user |
+| `/api/admin/users/{id}/role` | PUT | Yes | Admin | Change role |
+| `/api/admin/users/{id}` | DELETE | Yes | Admin | Remove user |
+
+### Standard Error Response Format
+
+```json
+{
+  "error": "Human-readable error message",
+  "code": "MACHINE_READABLE_CODE",
+  "details": {}
+}
+```
+
+| HTTP Status | Code | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Invalid input |
+| 401 | `UNAUTHORIZED` | Not authenticated |
+| 403 | `FORBIDDEN` | Wrong role |
+| 404 | `NOT_FOUND` | Resource doesn't exist |
+| 409 | `CONFLICT` | Duplicate email, etc. |
+| 413 | `FILE_TOO_LARGE` | Upload exceeds 10MB |
+| 415 | `UNSUPPORTED_TYPE` | Invalid file type |
+| 422 | `LLM_PARSE_ERROR` | LLM returned invalid response |
+| 500 | `INTERNAL_ERROR` | Server error |
+
+---
+
+## 11. LLM Integration
+
+### LLM Client Module
+
+```typescript
+// services/llm.ts
+
+interface LLMConfig {
+  provider: "groq" | "gemini"
+  model: string
+  temperature: number
+  maxTokens: number
+}
+
+// Primary: Groq
+const GROQ_CONFIG: LLMConfig = {
+  provider: "groq",
+  model: "llama-3.3-70b-versatile",
+  temperature: 0.1,
+  maxTokens: 4096,
+}
+
+// Fallback: Gemini
+const GEMINI_CONFIG: LLMConfig = {
+  provider: "gemini",
+  model: "gemini-2.0-flash",
+  temperature: 0.1,
+  maxTokens: 4096,
+}
+```
+
+### Prompt Templates
+
+#### Checklist Scanning Prompt
+
+```
+SYSTEM PROMPT:
+You are a compliance document parser. Your task is to extract 
+structured checklist items from compliance/regulation text.
+
+For each item you find, return a JSON object with these fields:
+- field_name: A short, descriptive label for the requirement
+- field_type: One of "number", "boolean", "text", "select"
+- unit: The unit of measurement if applicable (e.g., "meters", 
+  "hours", "persons", "%"), or null
+- condition: One of "less_than", "greater_than", "equals", 
+  "range", "must_be_present", "must_contain", "is_true"
+- threshold_value: The specific limit or required value. For 
+  "range" condition, use [min, max]. For numbers, use the number. 
+  For booleans, use true/false.
+- source_text: The exact sentence or phrase from the document 
+  where this item was identified
+- confidence: A number from 0.0 to 1.0 indicating how confident 
+  you are in the extraction accuracy
+- regulation_ref: Any section number, standard reference, or 
+  code reference mentioned (e.g., "Section 4.1", "ISO 27001 A.5"), 
+  or null
+
+FIELD TYPE DETECTION RULES:
+- If the text specifies a measurable quantity with a numerical 
+  limit (height, weight, distance, time, count) → "number"
+- If the text requires something to be present, absent, true, 
+  or false → "boolean"
+- If the text allows specific named options from a list → "select"
+- If the text is qualitative, subjective, or descriptive 
+  (adequate, sufficient, proper) → "text"
+
+CONDITION DETECTION RULES:
+- "shall not exceed", "maximum", "must not be more than", 
+  "not more than" → "less_than"
+- "minimum", "at least", "must be no less than", 
+  "no less than" → "greater_than"
+- "must be", "shall be exactly", "equal to" → "equals"
+- "between X and Y", "from X to Y", "range of X to Y" → "range"
+- "must be present", "must have", "is required", 
+  "shall include" → "must_be_present"
+- "must contain", "must include", "shall contain" → "must_contain"
+
+Return ONLY a valid JSON array. No markdown formatting, no 
+explanations, no code blocks. Just the raw JSON array.
+
+USER PROMPT:
+[Extracted document text goes here]
+```
+
+#### Value Extraction Prompt
+
+```
+SYSTEM PROMPT:
+You are a document analysis system. Given an audit/inspection 
+document and a list of compliance fields to check, extract the 
+actual values for each field from the document.
+
+Input: You will receive the document text and a JSON array of 
+fields, each with a field_name, field_type, and description.
+
+For each field, return:
+- field_name: The exact field name from the input
+- extracted_value: The actual value found in the document 
+  (as a string). If not found, return null
+- source_excerpt: The exact sentence or paragraph from the 
+  document where the value was found (50-200 chars). If not 
+  found, return null
+- found: true if value was found, false if not
+
+Be precise with numerical values. Extract the number only, 
+without units. For booleans, return "true" or "false" as strings.
+
+Return ONLY a valid JSON array.
+
+USER PROMPT:
+Document text:
+[document text]
+
+Fields to extract:
+[JSON array of checklist items]
+```
+
+#### Summary Generation Prompt
+
+```
+SYSTEM PROMPT:
+You are a compliance reporting assistant. Given compliance check 
+results, write a concise 2-3 sentence summary. Include:
+1. Overall pass rate
+2. What passed (group similar items)
+3. What failed and why (be specific with values)
+
+Keep it professional and factual. No speculation.
+
+USER PROMPT:
+Compliance check results:
+[results JSON]
+```
+
+### LLM Response Handling
+
+```typescript
+// services/llm.ts
+
+async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+  // Try Groq first
+  try {
+    const response = await groq.chat.completions.create({
+      model: GROQ_CONFIG.model,
+      temperature: GROQ_CONFIG.temperature,
+      max_tokens: GROQ_CONFIG.maxTokens,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" }, // Groq supports this
+    })
+    return response.choices[0].message.content
+  } catch (groqError) {
+    console.error("Groq failed, trying Gemini:", groqError)
+
+    // Fallback to Gemini
+    const model = genAI.getGenerativeModel({ model: GEMINI_CONFIG.model })
+    const result = await model.generateContent(
+      `${systemPrompt}\n\n${userPrompt}`
+    )
+    return result.response.text()
+  }
+}
+
+function parseJSONResponse<T>(raw: string, schema: ZodSchema<T>): T {
+  // Try direct parse
+  try {
+    const parsed = JSON.parse(raw)
+    return schema.parse(parsed)
+  } catch {
+    // Try extracting JSON from markdown code block
+    const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (match) {
+      return schema.parse(JSON.parse(match[1]))
+    }
+    throw new Error("Failed to parse LLM response as JSON")
+  }
+}
+```
+
+### Retry Logic
+
+```
+- On LLM API error → retry once with same provider
+- On 2nd failure → switch to fallback provider
+- On JSON parse error → retry once with same provider 
+  (add "Return ONLY valid JSON" to prompt)
+- On 2nd parse failure → throw LLM_PARSE_ERROR
+```
+
+---
+
+## 12. UI/UX Specifications
+
+### Design System
+
+#### Color Palette
+
+```css
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-hover: #1e1e1e;
+  --border: #262626;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+```
+
+#### Typography
+
+- Headings: `font-display` (loaded via Google Fonts: Inter or Geist)
+- Body: `font-sans`
+- Code/data: `font-mono`
+
+#### Status Badge Colors
+
+| Status | Color | Background |
+|---|---|---|
+| UPLOADED | gray-400 | gray-900 |
+| PROCESSING | blue-400 | blue-950 |
+| MATCHED | yellow-400 | yellow-950 |
+| UNMATCHED | orange-400 | orange-950 |
+| COMPLIANT | green-400 | green-950 |
+| NON_COMPLIANT | red-400 | red-950 |
+| PASS | green-400 | green-950 |
+| FAIL | red-400 | red-950 |
+| NOT_FOUND | gray-400 | gray-950 |
+| NEEDS_REVIEW | yellow-400 | yellow-950 |
+
+### Page Layouts
+
+#### App Shell
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ┌──────────┐ ┌────────────────────────────────────────┐ │
+│ │          │ │  Top Bar                    [User] [▼]  │ │
+│ │  LOGO    │ ├────────────────────────────────────────┤ │
+│ │          │ │                                        │ │
+│ │ ──────── │ │                                        │ │
+│ │          │ │                                        │ │
+│ │Dashboard │ │           Page Content                 │ │
+│ │Documents │ │                                        │ │
+│ │Checklists│ │                                        │ │
+│ │Reports   │ │                                        │ │
+│ │          │ │                                        │ │
+│ │ ──────── │ │                                        │ │
+│ │Users *   │ │                                        │ │
+│ │          │ │                                        │ │
+│ │Settings  │ │                                        │ │
+│ │          │ │                                        │ │
+│ └──────────┘ └────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+
+* Users: ADMIN only (hidden for other roles)
+Sidebar: 240px wide, collapsible on mobile
+```
+
+#### Checklist Editor Component
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Checklist Name: [Building Safety Compliance v2      ]   │
+│ Description:    [Standard building requirements     ]   │
+│ Category:       [Building & Construction ▼]             │
+│ Tags:           [safety] [structural] [+ Add]           │
+│                                                         │
+│ ─── CHECKLIST ITEMS ─────────────────────────────────── │
+│                                                         │
+│ ┌── ⋮ ───────────────────────────────────────────────┐ │
+│ │ 1. Building Height                                  │ │
+│ │    NUMBER | less_than | 50 meters | §4.1            │ │
+│ │    🟢 97% confidence                                │ │
+│ │    [Edit] [Duplicate] [Delete]                      │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│ ┌── ⋮ ───────────────────────────────────────────────┐ │
+│ │ 2. Fire Extinguisher Present                        │ │
+│ │    BOOLEAN | must_be_present | true                 │ │
+│ │    🟢 99% confidence                                │ │
+│ │    [Edit] [Duplicate] [Delete]                      │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│ ┌── ⋮ ───────────────────────────────────────────────┐ │
+│ │ 3. Ventilation                                      │ │
+│ │    TEXT | must_contain | "adequate"                  │ │
+│ │    🔴 65% confidence ⚠ Low confidence, please verify│ │
+│ │    [Edit] [Duplicate] [Delete]                      │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│ [+ Add Field]  [Scan from Document]                     │
+│                                                         │
+│ ─────────────────────────────────────────────────────── │
+│                              [Cancel]  [Save Checklist] │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Add/Edit Field Modal
+
+```
+┌─────────────────────────────────────────┐
+│ Add Checklist Field                     │
+│                                         │
+│ Field Name *                            │
+│ [Building Height                    ]   │
+│                                         │
+│ Field Type *        Unit                │
+│ [Number         ▼]  [meters         ]   │
+│                                         │
+│ Condition *                             │
+│ [must not exceed ▼]                     │
+│                                         │
+│ Threshold Value *                       │
+│ [50                                 ]   │
+│                                         │
+│ Regulation Reference                    │
+│ [Section 4.1                        ]   │
+│                                         │
+│ (For SELECT type only:)                 │
+│ Options                                 │
+│ [Class A] [Class B] [+ Add Option]      │
+│                                         │
+│                          [Cancel] [Save] │
+└─────────────────────────────────────────┘
+```
+
+#### Compliance Report Page
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ← Back to Document                                      │
+│                                                         │
+│ COMPLIANCE REPORT                                       │
+│ Document: Skyline Tower Audit Q1                        │
+│ Checklist: Building Safety Compliance                   │
+│ Generated: Jan 15, 2025 at 11:00 AM                    │
+│                                                         │
+│ ┌─────────────┐  ┌──────────────────────────────────┐  │
+│ │             │  │ Summary                          │  │
+│ │    85.7%    │  │                                  │  │
+│ │             │  │ Document passes 6 of 7 compliance│  │
+│ │  COMPLIANT  │  │ checks. The only failure is fire │  │
+│ │             │  │ resistance rating (1.5h vs 2h    │  │
+│ │  (green)    │  │ required).                       │  │
+│ └─────────────┘  └──────────────────────────────────┘  │
+│                                                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ RESULTS                          [All ▼] [Failures]│ │
+│ ├────┬──────────────────┬────────┬──────────┬────────┤ │
+│ │ #  │ Field            │ Status │ Expected │ Found  │ │
+│ ├────┼──────────────────┼────────┼──────────┼────────┤ │
+│ │ 1  │ Building Height  │ PASS   │ < 50m    │ 42m    │ │
+│ │ 2  │ Fire Extinguisher│ PASS   │ Present  │ Yes    │ │
+│ │ 3  │ Exit Distance    │ PASS   │ < 30m    │ 25m    │ │
+│ │ 4  │ Occupancy        │ PASS   │ < 200    │ 180    │ │
+│ │ 5  │ Dead Load        │ PASS   │ > 5kN/m² │ 6.2    │ │
+│ │ 6  │ Emergency Stairs │ PASS   │ Present  │ Yes    │ │
+│ │ 7  │ Fire Resistance  │ FAIL   │ > 2h     │ 1.5h   │ │
+│ └────┴──────────────────┴────────┴──────────┴────────┘ │
+│                                                         │
+│ Click row → expand source excerpt                       │
+│                                                         │
+│ [Export PDF]  [Re-run Check]                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Dashboard
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Dashboard                                    [Upload +] │
+│                                                         │
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│ │ 📄 45    │ │ ✅ 73.3% │ │ 📋 8     │ │ ⏳ 5     │   │
+│ │ Total    │ │ Compliance│ │ Active   │ │ Pending  │   │
+│ │ Documents│ │ Rate     │ │ Checklists│ │ Reviews  │   │
+│ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
+│                                                         │
+│ ┌────────────────────┐ ┌────────────────────────────┐  │
+│ │ Compliance         │ │ Score by Category          │  │
+│ │ Breakdown          │ │                            │  │
+│ │                    │ │ Building  ████████░ 82.5%  │  │
+│ │    ┌───┐           │ │ Fire      █████████ 91.2%  │  │
+│ │    │pie│           │ │ Environ.  ██████░░░ 67.8%  │  │
+│ │    │   │           │ │                            │  │
+│ │    └───┘           │ │                            │  │
+│ │ Compliant  22      │ │                            │  │
+│ │ Non-comp.  13      │ │                            │  │
+│ │ Pending    10      │ │                            │  │
+│ └────────────────────┘ └────────────────────────────┘  │
+│                                                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Recent Activity                                     │ │
+│ │                                                     │ │
+│ │ 📄 John uploaded "Building Audit Q1"       2h ago  │ │
+│ │ 📋 Jane created "ISO 27001 Basics"         5h ago  │ │
+│ │ ✅ "Fire Audit" passed compliance (92%)    1d ago  │ │
+│ │ ❌ "Env Report" failed compliance (45%)    2d ago  │ │
+│ └─────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. Development Phases
+
+### BACKEND PHASES (Local Development)
+
+---
+
+#### Phase B1 — Project Setup, Database & Auth
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] Next.js project initialized (App Router + TypeScript + Tailwind)
+- [ ] PostgreSQL running (Docker)
+- [ ] Prisma schema applied (`prisma migrate dev`)
+- [ ] POST `/api/auth/register` — creates org + admin user
+- [ ] POST `/api/auth/login` — authenticates, returns session
+- [ ] GET `/api/auth/session` — returns current user info
+- [ ] NextAuth configured with JWT strategy
+- [ ] Seed script: demo org, 3 users (admin/auditor/viewer)
+- [ ] Test script: `scripts/test-auth.ts` — all tests pass
+
+**Seed Data**:
+```
+Organization: "Demo Corp"
+Users:
+  - admin@demo.com / password123 / Admin User / ADMIN
+  - auditor@demo.com / password123 / Auditor User / AUDITOR
+  - viewer@demo.com / password123 / Viewer User / VIEWER
+```
+
+---
+
+#### Phase B2 — Checklist CRUD APIs
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] Auth middleware (extract user, inject orgId)
+- [ ] RBAC helper: `withAuth(handler, roles)`
+- [ ] GET `/api/checklists` — list with filters
+- [ ] POST `/api/checklists` — create with items
+- [ ] GET `/api/checklists/[id]` — detail with items
+- [ ] PUT `/api/checklists/[id]` — update metadata + replace items
+- [ ] DELETE `/api/checklists/[id]` — cascade delete
+- [ ] POST `/api/checklists/[id]/clone` — clone template
+- [ ] Zod validation schemas for all inputs
+- [ ] Condition-type compatibility validation
+- [ ] Seed: 3 pre-built template checklists
+- [ ] Test script: `scripts/test-checklists.ts` — all tests pass
+
+**Template Seed Data**:
+
+Template 1: **Building Safety Compliance**
+| Field | Type | Condition | Threshold | Unit |
+|---|---|---|---|---|
+| Building Height (Residential) | NUMBER | LESS_THAN | 50 | meters |
+| Building Height (Commercial) | NUMBER | LESS_THAN | 100 | meters |
+| Dead Load Capacity | NUMBER | GREATER_THAN | 5 | kN/m² |
+| Live Load Capacity | NUMBER | GREATER_THAN | 2.5 | kN/m² |
+| Emergency Staircases Required | BOOLEAN | MUST_BE_PRESENT | true | — |
+| Fire Resistance Rating | NUMBER | GREATER_THAN | 2 | hours |
+| Wall Material | TEXT | MUST_CONTAIN | fire-rated | — |
+| Occupancy Per Floor | NUMBER | LESS_THAN | 200 | persons |
+
+Template 2: **Fire Safety Compliance**
+| Field | Type | Condition | Threshold | Unit |
+|---|---|---|---|---|
+| Fire Extinguishers Present | BOOLEAN | MUST_BE_PRESENT | true | — |
+| Distance to Nearest Exit | NUMBER | LESS_THAN | 30 | meters |
+| Fire Alarm System | BOOLEAN | MUST_BE_PRESENT | true | — |
+| Sprinkler System | BOOLEAN | MUST_BE_PRESENT | true | — |
+| Emergency Lighting | BOOLEAN | MUST_BE_PRESENT | true | — |
+| Fire Escape Route Width | NUMBER | GREATER_THAN | 1.2 | meters |
+
+Template 3: **Environmental Compliance**
+| Field | Type | Condition | Threshold | Unit |
+|---|---|---|---|---|
+| CO2 Emissions | NUMBER | LESS_THAN | 500 | tons/year |
+| Waste Recycling Rate | NUMBER | GREATER_THAN | 30 | % |
+| Water Usage | NUMBER | LESS_THAN | 10000 | liters/day |
+| Noise Level | NUMBER | LESS_THAN | 85 | dB |
+| Air Quality Index | NUMBER | LESS_THAN | 100 | AQI |
+| Hazardous Waste Disposal | TEXT | MUST_CONTAIN | certified | — |
+
+---
+
+#### Phase B3 — Document Upload & Text Extraction
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] `/uploads` directory with org-based subdirectories
+- [ ] POST `/api/documents/upload` — multipart form, extract text
+- [ ] GET `/api/documents` — list with filters + pagination
+- [ ] GET `/api/documents/[id]` — detail with extracted text
+- [ ] DELETE `/api/documents/[id]` — delete file + record
+- [ ] Text extraction service:
+  - [ ] PDF → `pdf-parse`
+  - [ ] DOCX → `mammoth`
+  - [ ] PNG/JPG → `tesseract.js`
+  - [ ] TXT → `fs.readFile`
+- [ ] File validation: type check, size limit (10MB)
+- [ ] Activity logging on upload
+- [ ] Test script: `scripts/test-documents.ts` — all tests pass
+
+---
+
+#### Phase B4 — LLM Integration
+
+**Duration**: 2-3 days
+
+**Deliverables**:
+- [ ] LLM client module (`services/llm.ts`)
+  - [ ] Groq client (primary)
+  - [ ] Gemini client (fallback)
+  - [ ] Retry logic
+  - [ ] JSON response parsing with Zod validation
+- [ ] POST `/api/scan/checklist` — scan doc into checklist fields
+- [ ] POST `/api/scan/extract-values` — extract values from audit doc
+- [ ] Prompt templates for:
+  - [ ] Checklist field extraction
+  - [ ] Document value extraction
+  - [ ] Summary generation
+- [ ] Response schema validation (Zod)
+- [ ] Confidence score assignment
+- [ ] Error handling: parse failures, API timeouts, rate limits
+- [ ] Test scripts:
+  - [ ] `scripts/test-scan-checklist.ts`
+  - [ ] `scripts/test-extract-values.ts`
+
+---
+
+#### Phase B5 — Compliance Engine
+
+**Duration**: 2-3 days
+
+**Deliverables**:
+- [ ] Auto-match service (`services/matching.ts`)
+  - [ ] Keyword extraction from document
+  - [ ] Checklist scoring by overlap
+  - [ ] Confidence threshold for auto-match
+- [ ] POST `/api/documents/[id]/match` — auto or manual match
+- [ ] Compliance evaluation engine (`services/compliance.ts`)
+  - [ ] All condition-type evaluation logic
+  - [ ] Score calculation
+  - [ ] Result persistence
+- [ ] POST `/api/documents/[id]/check` — run full compliance check
+- [ ] GET `/api/documents/[id]/results` — get results
+- [ ] GET `/api/documents/[id]/results/pdf` — export PDF
+- [ ] PDF generation with report layout
+- [ ] Activity logging on match and check
+- [ ] Test script: `scripts/test-compliance.ts` — all tests pass
+
+---
+
+#### Phase B6 — Dashboard APIs, RBAC & Activity
+
+**Duration**: 1-2 days
+
+**Deliverables**:
+- [ ] GET `/api/dashboard/stats` — aggregated statistics
+- [ ] GET `/api/dashboard/recent-activity` — activity feed
+- [ ] RBAC middleware applied to ALL routes
+- [ ] GET `/api/admin/users` — list org users
+- [ ] POST `/api/admin/users/invite` — create user
+- [ ] PUT `/api/admin/users/[id]/role` — change role
+- [ ] DELETE `/api/admin/users/[id]` — remove user
+- [ ] Activity logging integrated into all mutation endpoints
+- [ ] Test scripts:
+  - [ ] `scripts/test-dashboard.ts`
+  - [ ] `scripts/test-rbac.ts`
+
+---
+
+### FRONTEND PHASES (After All Backend Tests Pass)
+
+---
+
+#### Phase F1 — Layout Shell & Auth Pages
+
+**Duration**: 1-2 days
+
+**Deliverables**:
+- [ ] shadcn/ui installed and configured
+- [ ] App layout with sidebar + topbar
+- [ ] Sidebar navigation (role-aware)
+- [ ] `/login` page (email + password form)
+- [ ] `/register` page (email, password, name, org name)
+- [ ] Auth context provider (`useSession`, `useRole`)
+- [ ] Route protection middleware (redirect to /login)
+- [ ] Loading skeletons for layout
+
+---
+
+#### Phase F2 — Checklist Pages
+
+**Duration**: 2-3 days
+
+**Deliverables**:
+- [ ] `/checklists` — list page with table, filters, search
+- [ ] `/checklists/new` — create page with ChecklistEditor
+- [ ] `/checklists/[id]` — view/edit page
+- [ ] ChecklistEditor component:
+  - [ ] Metadata form
+  - [ ] Items list (sortable)
+  - [ ] Add/edit/delete/duplicate items
+  - [ ] Dynamic field inputs based on type
+  - [ ] Condition dropdown filtered by type
+  - [ ] Validation feedback
+- [ ] Clone template button
+- [ ] Delete confirmation dialog
+
+---
+
+#### Phase F3 — Document Pages
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] `/documents` — list page with table, status badges, filters
+- [ ] Upload modal with react-dropzone
+- [ ] `/documents/[id]` — detail page (two-panel)
+  - [ ] Extracted text panel
+  - [ ] Actions panel (match, check, view report)
+- [ ] Processing status polling
+- [ ] Delete confirmation
+
+---
+
+#### Phase F4 — AI Scanner UI
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] "Scan from Document" flow:
+  - [ ] Upload step
+  - [ ] Processing step (loading spinner)
+  - [ ] Results step (pre-filled ChecklistEditor)
+- [ ] Confidence badges (green/yellow/red)
+- [ ] Source text display per item
+- [ ] Bulk actions (accept high confidence, clear low)
+- [ ] Error states (parse failure, no items found)
+
+---
+
+#### Phase F5 — Compliance Report Pages
+
+**Duration**: 1-2 days
+
+**Deliverables**:
+- [ ] `/documents/[id]/report` — report page
+  - [ ] Score visualization (circular progress)
+  - [ ] Summary section
+  - [ ] Results table with status icons
+  - [ ] Expandable source excerpts
+  - [ ] Filter: all / failures only
+- [ ] `/reports` — list page (all results across documents)
+- [ ] PDF export trigger (download)
+
+---
+
+#### Phase F6 — Dashboard & Polish
+
+**Duration**: 2 days
+
+**Deliverables**:
+- [ ] `/dashboard` — stats cards, charts, activity feed
+- [ ] `/admin/users` — user management table (ADMIN only)
+- [ ] Error boundaries on all pages
+- [ ] Empty states for all data views
+- [ ] Loading skeletons
+- [ ] Toast notifications for all actions
+- [ ] Form validation inline errors
+- [ ] 404 page
+- [ ] Mobile responsive adjustments
+- [ ] End-to-end flow walkthrough
+
+---
+
+## 14. Environment Variables
+
+### `.env.local` (Development)
+
+```env
+# Database
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/compliance_desk"
+
+# NextAuth
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key-change-in-production"
+
+# LLM APIs
+GROQ_API_KEY="gsk_xxxxxxxxxxxxxxxxxxxxxxxx"
+GEMINI_API_KEY="AIzaSyxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# File Storage
+UPLOAD_DIR="./uploads"
+MAX_FILE_SIZE_MB=10
+
+# App
+APP_NAME="Compliance Desk"
+```
+
+### `.env.production` (AWS — later)
+
+```env
+DATABASE_URL="postgresql://user:pass@rds-endpoint:5432/compliance_desk"
+NEXTAUTH_URL="https://your-domain.com"
+NEXTAUTH_SECRET="production-secret"
+GROQ_API_KEY="..."
+GEMINI_API_KEY="..."
+UPLOAD_DIR="s3://your-bucket/uploads"
+AWS_REGION="ap-south-1"
+S3_BUCKET="compliance-desk-uploads"
+```
+
+---
+
+## 15. File Structure
+
+```
+compliance-desk/
+├── app/
+│   ├── (auth)/
+│   │   ├── login/
+│   │   │   └── page.tsx
+│   │   └── register/
+│   │       └── page.tsx
+│   ├── (dashboard)/
+│   │   ├── layout.tsx              // sidebar + topbar
+│   │   ├── dashboard/
+│   │   │   └── page.tsx
+│   │   ├── documents/
+│   │   │   ├── page.tsx            // list
+│   │   │   └── [id]/
+│   │   │       ├── page.tsx        // detail
+│   │   │       └── report/
+│   │   │           └── page.tsx
+│   │   ├── checklists/
+│   │   │   ├── page.tsx            // list
+│   │   │   ├── new/
+│   │   │   │   └── page.tsx        // create
+│   │   │   └── [id]/
+│   │   │       └── page.tsx        // view/edit
+│   │   ├── reports/
+│   │   │   └── page.tsx
+│   │   └── admin/
+│   │       └── users/
+│   │           └── page.tsx
+│   ├── api/
+│   │   ├── auth/
+│   │   │   ├── [...nextauth]/
+│   │   │   │   └── route.ts        // NextAuth handler
+│   │   │   ├── register/
+│   │   │   │   └── route.ts
+│   │   │   └── session/
+│   │   │       └── route.ts
+│   │   ├── documents/
+│   │   │   ├── route.ts            // GET list
+│   │   │   ├── upload/
+│   │   │   │   └── route.ts        // POST upload
+│   │   │   └── [id]/
+│   │   │       ├── route.ts        // GET detail, DELETE
+│   │   │       ├── match/
+│   │   │       │   └── route.ts
+│   │   │       ├── check/
+│   │   │       │   └── route.ts
+│   │   │       └── results/
+│   │   │           ├── route.ts
+│   │   │           └── pdf/
+│   │   │               └── route.ts
+│   │   ├── checklists/
+│   │   │   ├── route.ts            // GET list, POST create
+│   │   │   └── [id]/
+│   │   │       ├── route.ts        // GET, PUT, DELETE
+│   │   │       └── clone/
+│   │   │           └── route.ts
+│   │   ├── scan/
+│   │   │   ├── checklist/
+│   │   │   │   └── route.ts
+│   │   │   └── extract-values/
+│   │   │       └── route.ts
+│   │   ├── dashboard/
+│   │   │   ├── stats/
+│   │   │   │   └── route.ts
+│   │   │   └── recent-activity/
+│   │   │       └── route.ts
+│   │   └── admin/
+│   │       └── users/
+│   │           ├── route.ts        // GET list
+│   │           ├── invite/
+│   │           │   └── route.ts
+│   │           └── [id]/
+│   │               ├── route.ts    // DELETE
+│   │               └── role/
+│   │                   └── route.ts
+│   ├── layout.tsx
+│   └── page.tsx                    // redirect to /dashboard
+├── components/
+│   ├── ui/                         // shadcn/ui components
+│   │   ├── button.tsx
+│   │   ├── input.tsx
+│   │   ├── select.tsx
+│   │   ├── dialog.tsx
+│   │   ├── table.tsx
+│   │   ├── badge.tsx
+│   │   ├── card.tsx
+│   │   ├── toast.tsx
+│   │   ├── skeleton.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   └── avatar.tsx
+│   ├── layout/
+│   │   ├── sidebar.tsx
+│   │   ├── topbar.tsx
+│   │   └── app-shell.tsx
+│   ├── auth/
+│   │   ├── login-form.tsx
+│   │   └── register-form.tsx
+│   ├── checklists/
+│   │   ├── checklist-editor.tsx
+│   │   ├── checklist-item-form.tsx
+│   │   ├── checklist-list.tsx
+│   │   └── scanner-flow.tsx
+│   ├── documents/
+│   │   ├── document-upload.tsx
+│   │   ├── document-list.tsx
+│   │   ├── document-detail.tsx
+│   │   └── match-panel.tsx
+│   ├── reports/
+│   │   ├── compliance-report.tsx
+│   │   ├── score-gauge.tsx
+│   │   └── results-table.tsx
+│   └── dashboard/
+│       ├── stats-cards.tsx
+│       ├── compliance-chart.tsx
+│       └── activity-feed.tsx
+├── lib/
+│   ├── prisma.ts                   // Prisma client singleton
+│   ├── auth.ts                     // NextAuth options
+│   ├── rbac.ts                     // withAuth middleware
+│   ├── validation.ts               // Zod schemas
+│   └── utils.ts                    // helper functions
+├── services/
+│   ├── llm.ts                      // LLM client (Groq + Gemini)
+│   ├── extraction.ts               // Text extraction (OCR, PDF, DOCX)
+│   ├── matching.ts                 // Auto-match service
+│   └── compliance.ts               // Compliance evaluation engine
+├── prisma/
+│   ├── schema.prisma
+│   ├── migrations/
+│   └── seed.ts
+├── scripts/
+│   ├── test-auth.ts
+│   ├── test-checklists.ts
+│   ├── test-documents.ts
+│   ├── test-scan-checklist.ts
+│   ├── test-extract-values.ts
+│   ├── test-compliance.ts
+│   ├── test-dashboard.ts
+│   └── test-rbac.ts
+├── test-files/
+│   ├── sample-audit.pdf
+│   ├── sample-compliance.pdf
+│   └── sample-scan.png
+├── uploads/                        // .gitignore'd
+├── public/
+├── .env.local
+├── .env.example
+├── .gitignore
+├── docker-compose.yml              // PostgreSQL
+├── next.config.js
+├── tailwind.config.ts
+├── tsconfig.json
+├── package.json
+└── README.md
+```
+
+---
+
+## 16. Acceptance Criteria
+
+### Backend Complete When:
+
+- [ ] All test scripts run and pass
+- [ ] Auth: register, login, session work correctly
+- [ ] RBAC: viewer blocked from all mutations
+- [ ] Checklist CRUD: create, read, update, delete, clone
+- [ ] Checklist validation: condition-type compatibility enforced
+- [ ] Document upload: PDF, DOCX, images accepted and text extracted
+- [ ] Document validation: file type and size enforced
+- [ ] LLM scanning: returns valid structured JSON for checklist items
+- [ ] LLM extraction: returns valid values for audit documents
+- [ ] Compliance engine: correctly evaluates all condition-type combinations
+- [ ] Score calculation: accurate percentage
+- [ ] Auto-match: suggests correct checklist for similar documents
+- [ ] Dashboard stats: correct aggregations
+- [ ] Activity logs: recorded for all key actions
+
+### Frontend Complete When:
+
+- [ ] User can register, login, and see dashboard
+- [ ] User can create checklist manually with all field types
+- [ ] User can scan a compliance document into checklist fields
+- [ ] User can edit/delete/duplicate checklist items
+- [ ] User can upload audit documents and see extracted text
+- [ ] User can match document to checklist (auto + manual)
+- [ ] User can run compliance check and see report
+- [ ] Report shows per-item pass/fail with source excerpts
+- [ ] Score gauge renders correctly
+- [ ] PDF export downloads
+- [ ] Dashboard shows stats, charts, activity
+- [ ] Admin can manage users (invite, change role, remove)
+- [ ] All pages load without errors
+- [ ] Loading states shown during data fetch
+- [ ] Empty states shown when no data
+- [ ] Mobile responsive (basic)
+
+### Full End-to-End Flow:
+
+```
+1. Register new org → lands on dashboard (empty state)
+2. Navigate to Checklists → see templates
+3. Clone "Building Safety" template → editable copy created
+4. Upload a compliance PDF → scan into checklist fields
+5. Review extracted items → edit low-confidence ones → save
+6. Navigate to Documents → upload audit PDF
+7. View document → extracted text shown
+8. Click "Match to Checklist" → auto-suggests or manual select
+9. Click "Run Compliance Check" → processing indicator
+10. View report → score gauge, per-item results, summary
+11. Export PDF → downloads
+12. Return to Dashboard → stats updated, activity logged
+```
+
+---
+
+**END OF PRD**
+
+This document is ready to be handed to a vibe coder for development. Start with Phase B1 and work sequentially through each phase, running test scripts to verify before moving forward.
