@@ -2,8 +2,6 @@
 
 @plugin "tailwindcss-animate";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -81,51 +79,44 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
+    border-color: var(--border);
   }
 
   :root {
-    /* Forest Ink */
-    /* Background layers */
-    --bg-deep:      #060d09;
-    --bg-base:      #0b1610;
-    --bg-surface:   #111f17;
-    --bg-elevated:  #182a1f;
+    /* Executive Clean Light Theme */
+    --bg-deep:      #f1f5f9;     /* Slate 100 base */
+    --bg-base:      #f8fafc;     /* Slate 50 main canvas */
+    --bg-surface:   #ffffff;     /* Pure White cards */
+    --bg-elevated:  #ffffff;     /* Modals, menus, dropdowns */
     
     /* Borders */
-    --border-color: #1e3328;
-    --border-focus: #2d5a42;
+    --border-color: #e2e8f0;     /* Slate 200 border */
+    --border-focus: #f59e0b;     /* Warm Amber focus border */
     
-    /* Green accent spectrum */
-    --green-50:     #f0fdf4;
-    --green-100:    #dcfce7;
-    --green-200:    #bbf7d0;
-    --green-300:    #86efac;
-    --green-400:    #4ade80;
-    --green-500:    #22c55e;
-    --green-600:    #16a34a;
-    --green-700:    #15803d;
-    --green-800:    #166534;
-    --green-900:    #14532d;
+    /* Brand Amber & Gold Spectrum */
+    --gold-50:      #fffbeb;
+    --gold-100:     #fef3c7;
+    --gold-200:     #fde68a;
+    --gold-300:     #fcd34d;
+    --gold-400:     #fbbf24;
+    --gold-500:     #f59e0b;
+    --gold-600:     #d97706;     /* Deep readable amber */
+    --gold-700:     #b45309;
+    --gold-800:     #92400e;
     
-    /* Text */
-    --text-primary: #e8f5ec;
-    --text-secondary: #94b8a4;
-    --text-muted:   #5a7d6a;
-    --text-inverse: #060d09;
+    /* Text Hierarchy */
+    --text-primary:   #0f172a;   /* Slate 900 bold text */
+    --text-secondary: #475569;   /* Slate 600 body text */
+    --text-muted:     #94a3b8;   /* Slate 400 placeholder & muted text */
+    --text-inverse:   #ffffff;   /* Pure white text */
     
-    /* Semantic colors */
-    --success:      #22c55e;
-    --error:        #f87171;
-    --warning:      #fbbf24;
-    --info:         #60a5fa;
-    
-    /* Special */
-    --glow-green:   rgba(34, 197, 94, 0.15);
-    --glow-soft:    rgba(34, 197, 94, 0.05);
-    --shadow:       rgba(0, 0, 0, 0.4);
+    /* Semantic Status (Light Tinted) */
+    --success:      #059669;     /* Emerald 600 */
+    --error:        #e11d48;     /* Rose 600 */
+    --warning:      #d97706;     /* Amber 600 */
+    --info:         #0284c7;     /* Sky 600 */
 
-    /* Shadcn defaults mapped to Forest Ink */
+    /* Shadcn Mappings (Light Mode) */
     --background: var(--bg-base);
     --foreground: var(--text-primary);
     
@@ -135,26 +126,26 @@
     --popover: var(--bg-elevated);
     --popover-foreground: var(--text-primary);
 
-    --primary: var(--green-600);
-    --primary-foreground: var(--text-inverse);
+    --primary: #0f172a;          /* Sleek black/slate primary action */
+    --primary-foreground: #ffffff;
 
-    --secondary: var(--bg-surface);
-    --secondary-foreground: var(--text-secondary);
+    --secondary: #f1f5f9;
+    --secondary-foreground: var(--text-primary);
 
-    --muted: var(--bg-surface);
-    --muted-foreground: var(--text-muted);
+    --muted: #f8fafc;
+    --muted-foreground: var(--text-secondary);
 
-    --accent: var(--bg-elevated);
-    --accent-foreground: var(--text-primary);
+    --accent: #f8fafc;
+    --accent-foreground: var(--gold-600);
 
     --destructive: var(--error);
-    --destructive-foreground: var(--text-inverse);
+    --destructive-foreground: #ffffff;
 
     --border: var(--border-color);
     --input: var(--border-color);
-    --ring: var(--green-500);
+    --ring: var(--gold-500);
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
   }
 }
 
@@ -163,11 +154,48 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    letter-spacing: -0.01em;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Crisp Clean Utilities */
+.clean-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+}
+
+.clean-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+}
+
+.amber-badge {
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 @media print {
@@ -184,38 +212,14 @@
     display: none !important;
   }
 
-  /* Reset layout constraints for print */
   .report-container {
     max-width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
   }
 
-  /* Force background colors to print if user hasn't checked 'print backgrounds' (WebKit-specific) */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-  }
-  
-  /* Make text dark instead of light theme */
-  .text-text-primary, .text-text-secondary {
-    color: #111 !important;
-  }
-  
-  .text-text-muted {
-    color: #444 !important;
-  }
-
-  /* Adjust borders for print */
-  .border, .border-border, .border-b {
-    border-color: #ddd !important;
-  }
-  
-  .bg-surface, .bg-elevated, .bg-base {
-    background-color: white !important;
-  }
-  
-  .bg-base\/30, .bg-base\/50 {
-    background-color: #f9f9f9 !important;
   }
 }

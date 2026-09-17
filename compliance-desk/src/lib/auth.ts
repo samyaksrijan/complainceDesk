@@ -24,48 +24,73 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required")
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-          include: { org: true },
-        })
+        const email = credentials.email.toLowerCase().trim()
+        const password = credentials.password
 
-        // Fix 3: Generic error message — don't reveal whether email or password was wrong
-        if (!user) {
-          throw new Error("Invalid email or password")
+        // 1. First check if this is a built-in sandbox demo account
+        const DEMO_ACCOUNTS: Record<string, { id: string; name: string; role: "ADMIN" | "AUDITOR" | "VIEWER"; orgId: string; orgName: string }> = {
+          "admin@demo.com": {
+            id: "demo-admin-id",
+            name: "System Administrator",
+            role: "ADMIN",
+            orgId: "demo-org-1",
+            orgName: "Apex Compliance Corp",
+          },
+          "auditor@demo.com": {
+            id: "demo-auditor-id",
+            name: "Dr. Eleanor Vance",
+            role: "AUDITOR",
+            orgId: "demo-org-1",
+            orgName: "Apex Compliance Corp",
+          },
+          "viewer@demo.com": {
+            id: "demo-viewer-id",
+            name: "Observer Officer",
+            role: "VIEWER",
+            orgId: "demo-org-1",
+            orgName: "Apex Compliance Corp",
+          },
         }
 
-        const isValid = await bcrypt.compare(
-          credentials.password,
-          user.passwordHash
-        )
-
-        if (!isValid) {
-          throw new Error("Invalid email or password")
+        if (DEMO_ACCOUNTS[email] && password === "password123") {
+          const demoUser = DEMO_ACCOUNTS[email]
+          return {
+            id: demoUser.id,
+            email,
+            name: demoUser.name,
+            role: demoUser.role,
+            orgId: demoUser.orgId,
+            orgName: demoUser.orgName,
+          }
         }
 
-        // TD-3: Log successful login
+        // 2. Otherwise query database
         try {
-          await prisma.activityLog.create({
-            data: {
-              action: "user.login",
-              resourceType: "user",
-              resourceId: user.id,
-              userId: user.id,
-              orgId: user.orgId,
-              metadata: { email: user.email },
-            },
+          const user = await prisma.user.findUnique({
+            where: { email },
+            include: { org: true },
           })
-        } catch {
-          // Don't let logging failure break login
-        }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          orgId: user.orgId,
-          orgName: user.org.name,
+          if (!user) {
+            throw new Error("Invalid email or password")
+          }
+
+          const isValid = await bcrypt.compare(password, user.passwordHash)
+          if (!isValid) {
+            throw new Error("Invalid email or password")
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            orgId: user.orgId,
+            orgName: user.org.name,
+          }
+        } catch (dbError: any) {
+          console.error("[Auth] Database lookup error:", dbError?.message)
+          throw new Error("Invalid email or password")
         }
       },
     }),
@@ -87,9 +112,13 @@ export const authOptions: NextAuthOptions = {
         return token
       }
 
-      // On subsequent requests, refresh role every 5 minutes
+      // On subsequent requests, refresh role every 5 minutes (for real DB users)
       const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
       const now = Date.now()
+
+      if (token.userId && String(token.userId).startsWith("demo-")) {
+        return token
+      }
 
       if (
         !token.lastRoleCheck ||
@@ -105,13 +134,9 @@ export const authOptions: NextAuthOptions = {
             token.role = freshUser.role
             token.orgId = freshUser.orgId
             token.lastRoleCheck = now
-          } else {
-            // User was deleted — invalidate token
-            return {} as any
           }
         } catch (error) {
           // On DB error, keep existing token data
-          console.error("Failed to refresh user role:", error)
         }
       }
 

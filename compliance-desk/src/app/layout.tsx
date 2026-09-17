@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Poppins, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { Toaster } from "@/components/ui/sonner";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
+const plusJakartaSans = Plus_Jakarta_Sans({
+  weight: ["600", "700", "800"],
   variable: "--font-display",
   subsets: ["latin"],
 });
 
-const dmSans = DM_Sans({
+const poppins = Poppins({
+  weight: ["300", "400", "500", "600", "700"],
   variable: "--font-body",
   subsets: ["latin"],
 });
@@ -26,12 +27,11 @@ export const metadata: Metadata = {
     default: "Compliance Desk",
     template: "%s — Compliance Desk",
   },
-  description: "AI-powered compliance management — analyze documents, manage checklists, and generate compliance reports for your organization.",
+  description: "Enterprise automated compliance management — analyze regulatory documents, evaluate checklists, and generate certified audit reports.",
   icons: {
     icon: "/favicon.ico",
   },
 };
-
 
 export default function RootLayout({
   children,
@@ -41,13 +41,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${instrumentSerif.variable} ${dmSans.variable} ${jetbrainsMono.variable} antialiased`}
+      className={`${plusJakartaSans.variable} ${poppins.variable} ${jetbrainsMono.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
         <SessionProvider>
           <AuthProvider>
             {children}
-            <Toaster />
+            <Toaster position="top-right" richColors />
           </AuthProvider>
         </SessionProvider>
       </body>

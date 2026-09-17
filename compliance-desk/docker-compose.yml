@@ -1,7 +1,9 @@
 version: "3.8"
+
 services:
+  # Database Service: PostgreSQL 15
   db:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: compliance_desk_db
     restart: unless-stopped
     environment:
@@ -12,6 +14,39 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d compliance_desk"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Application Service: Next.js Frontend & API
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compliance_desk_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/compliance_desk"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_SECRET: "dev-secret-change-this-in-production-at-least-32-chars"
+      GROQ_API_KEY: "${GROQ_API_KEY}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      LLM_PRIMARY_PROVIDER: "groq"
+      LLM_FALLBACK_PROVIDER: "gemini"
+      UPLOAD_DIR: "./uploads"
+      NODE_ENV: "production"
+    ports:
+      - "3000:3000"
+    volumes:
+      - app_uploads:/app/uploads
 
 volumes:
   pgdata:
+    driver: local
+  app_uploads:
+    driver: local

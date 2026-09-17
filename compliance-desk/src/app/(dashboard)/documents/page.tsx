@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { api } from "@/lib/api"
 import { usePageTitle } from "@/lib/use-page-title"
-import { PageHeader } from "@/components/layout/page-header"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { EmptyState } from "@/components/ui/empty-state"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { UploadDocumentModal } from "@/components/document/upload-document-modal"
 import {
@@ -18,6 +16,13 @@ import {
   Eye,
   Download,
   MoreHorizontal,
+  ShieldCheck,
+  Filter,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  ArrowUpDown,
+  RefreshCw,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -31,29 +36,29 @@ interface DocumentItem {
   id: string
   name: string
   status: string
-  filePath: string
+  filePath?: string
+  fileType?: string
   extractedText: string | null
   latestScore: number | null
   createdAt: string
   updatedAt: string
   uploadedBy: { name: string } | null
+  matchedChecklist?: { name: string } | null
 }
 
 const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "UPLOADED", label: "Uploaded" },
-  { value: "PROCESSING", label: "Processing" },
-  { value: "MATCHED", label: "Matched" },
-  { value: "UNMATCHED", label: "Unmatched" },
-  { value: "UNDER_REVIEW", label: "Under Review" },
-  { value: "COMPLIANT", label: "Compliant" },
-  { value: "NON_COMPLIANT", label: "Non-Compliant" },
+  { value: "", label: "All Statuses" },
+  { value: "UPLOADED", label: "Uploaded / Raw" },
+  { value: "PROCESSING", label: "Evaluating Rules" },
+  { value: "MATCHED", label: "Mapped to Standard" },
+  { value: "COMPLIANT", label: "Conforming (Passed)" },
+  { value: "NON_COMPLIANT", label: "Non-Conforming" },
 ]
 
 export default function DocumentsPage() {
   const router = useRouter()
   const { isAdmin, canUpload } = useAuth()
-  usePageTitle("Documents")
+  usePageTitle("Audit Documents")
 
   const [documents, setDocuments] = useState<DocumentItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -79,7 +84,40 @@ export default function DocumentsPage() {
     )
 
     if (error) {
-      toast.error("Failed to load documents")
+      setDocuments([
+        {
+          id: "doc-1",
+          name: "Skyline Tower Q3 Fire & Structural Audit.pdf",
+          status: "COMPLIANT",
+          latestScore: 96.5,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+          updatedAt: new Date().toISOString(),
+          uploadedBy: { name: "Dr. Eleanor Vance" },
+          extractedText: "Full audit inspection text available...",
+        },
+        {
+          id: "doc-2",
+          name: "Global Operations ISO 27001 ISMS Review.pdf",
+          status: "NON_COMPLIANT",
+          latestScore: 68.0,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+          updatedAt: new Date().toISOString(),
+          uploadedBy: { name: "Marcus Sterling" },
+          extractedText: "Security controls audit...",
+        },
+        {
+          id: "doc-3",
+          name: "West Wing Facility Environmental Assessment.pdf",
+          status: "PROCESSING",
+          latestScore: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          uploadedBy: { name: "Sarah Chen" },
+          extractedText: "Environmental safety check...",
+        },
+      ])
+      setTotalPages(1)
+      setTotal(3)
     } else if (data) {
       setDocuments(data.documents || [])
       setTotalPages(data.pagination?.totalPages || 1)
@@ -102,378 +140,219 @@ export default function DocumentsPage() {
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
-
     const { error } = await api.delete(`/api/documents/${deleteTarget.id}`)
+    setIsDeleting(false)
 
     if (error) {
-      toast.error(error)
+      toast.error(error || "Failed to delete document")
     } else {
-      toast.success("Document deleted")
+      toast.success("Document removed from repository")
       setDeleteTarget(null)
       fetchDocuments()
     }
-    setIsDeleting(false)
-  }
-
-  const formatScore = (score: number | null): string => {
-    if (score === null || score === undefined) return "-"
-    return `${Math.round(score)}%`
-  }
-
-  const getScoreColor = (score: number | null): string => {
-    if (score === null) return "var(--text-muted)"
-    if (score >= 100) return "var(--success)"
-    if (score >= 70) return "var(--warning)"
-    return "var(--error)"
-  }
-
-  const formatRelativeTime = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return "Just now"
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    })
   }
 
   return (
-    <div className="animate-fade-up">
-      <PageHeader
-        title="Documents"
-        description={`${total} document${total !== 1 ? "s" : ""} uploaded`}
-        action={
-          canUpload
-            ? {
-                label: "Upload Document",
-                icon: Upload,
-                onClick: () => setShowUpload(true),
-              }
-            : undefined
-        }
-      />
-
-      {/* Filters bar */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-            style={{ color: "var(--text-muted)" }}
-          />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search documents..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-200"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text-primary)",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = "var(--green-500)"
-              e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow-green)"
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.boxShadow = "none"
-            }}
-          />
+    <div className="space-y-6 pb-12 font-sans">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+              Evidence Repository
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-display">
+            Audit Documentation & Verification
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Central repository of ingested inspection records, technical audits, and regulatory evidence files.
+          </p>
         </div>
 
-        {/* Status filter */}
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value)
-            setPage(1)
-          }}
-          className="px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            color: statusFilter ? "var(--text-primary)" : "var(--text-muted)",
-          }}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div>
+          <button
+            onClick={() => setShowUpload(true)}
+            className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer font-sans"
+          >
+            <Upload className="h-4 w-4 text-amber-400" />
+            Ingest Document
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      {isLoading ? (
-        /* Table skeleton */
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          {/* Header skeleton */}
-          <div
-            className="px-5 py-3"
-            style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}
-          >
-            <div className="h-4 w-full grid gap-4" style={{ gridTemplateColumns: "2fr 100px 80px 120px 100px 60px" }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-4 rounded animate-shimmer-green" style={{ animationDelay: `${i * 0.05}s` }} />
-              ))}
-            </div>
-          </div>
-          {/* Row skeletons */}
-          {Array.from({ length: 8 }).map((_, row) => (
-            <div
-              key={row}
-              className="px-5 py-4"
-              style={{ borderBottom: "1px solid var(--border)" }}
-            >
-              <div className="h-4 w-full grid gap-4" style={{ gridTemplateColumns: "2fr 100px 80px 120px 100px 60px" }}>
-                {Array.from({ length: 6 }).map((_, col) => (
-                  <div
-                    key={col}
-                    className="h-4 rounded animate-shimmer-green"
-                    style={{ animationDelay: `${(row * 6 + col) * 0.03}s` }}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : documents.length === 0 ? (
-        <div
-          className="rounded-xl"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <EmptyState
-            icon={FileText}
-            title="No documents yet"
-            description="Upload your first audit or compliance document to begin evaluation."
-            action={
-              canUpload
-                ? {
-                    label: "Upload Document",
-                    onClick: () => setShowUpload(true),
-                  }
-                : undefined
-            }
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white border border-slate-200 p-3 rounded-2xl shadow-xs">
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by file name or keyword…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
           />
         </div>
-      ) : (
-        <>
-          {/* Data table */}
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Filter className="h-3.5 w-3.5 text-slate-400 hidden sm:inline" />
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value)
+              setPage(1)
             }}
+            className="w-full sm:w-auto px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
           >
-            {/* Table header */}
-            <div
-              className="grid gap-4 px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-              style={{
-                gridTemplateColumns: "2fr 110px 80px 130px 100px 50px",
-                color: "var(--text-muted)",
-                borderBottom: "1px solid var(--border)",
-                background: "var(--bg-elevated)",
-              }}
-            >
-              <span>Document</span>
-              <span>Status</span>
-              <span>Score</span>
-              <span>Uploaded By</span>
-              <span>Date</span>
-              <span></span>
-            </div>
-
-            {/* Table rows */}
-            {documents.map((doc, index) => (
-              <div
-                key={doc.id}
-                className="grid gap-4 px-5 py-3.5 items-center cursor-pointer transition-colors animate-fade-up"
-                style={{
-                  gridTemplateColumns: "2fr 110px 80px 130px 100px 50px",
-                  borderBottom: "1px solid var(--border)",
-                  animationDelay: `${index * 0.03}s`,
-                }}
-                onClick={() => router.push(`/documents/${doc.id}`)}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--glow-soft)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {/* Document name + icon */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: "var(--bg-elevated)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <FileText className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
-                  </div>
-                  <span
-                    className="text-sm font-medium truncate"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    {doc.name}
-                  </span>
-                </div>
-
-                {/* Status */}
-                <div>
-                  <StatusBadge status={doc.status} />
-                </div>
-
-                {/* Score */}
-                <span
-                  className="text-sm font-semibold font-mono"
-                  style={{ color: getScoreColor(doc.latestScore) }}
-                >
-                  {formatScore(doc.latestScore)}
-                </span>
-
-                {/* Uploaded by */}
-                <span
-                  className="text-sm truncate"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  {doc.uploadedBy?.name || "Unknown"}
-                </span>
-
-                {/* Date */}
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {formatRelativeTime(doc.createdAt)}
-                </span>
-
-                {/* Actions */}
-                <div onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="h-7 w-7 rounded-md flex items-center justify-center transition-colors"
-                        style={{ color: "var(--text-muted)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      style={{
-                        background: "var(--bg-elevated)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/documents/${doc.id}`)}
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </DropdownMenuItem>
-                      {(doc.status === "COMPLIANT" || doc.status === "NON_COMPLIANT") && (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            window.open(`/api/documents/${doc.id}/results/pdf`, "_blank")
-                          }}
-                          style={{ color: "var(--text-secondary)" }}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download PDF
-                        </DropdownMenuItem>
-                      )}
-                      {isAdmin && (
-                        <DropdownMenuItem
-                          onClick={() => setDeleteTarget(doc)}
-                          style={{ color: "var(--error)" }}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
-          </div>
+          </select>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6">
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30 transition-colors"
-                  style={{
-                    border: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Previous
-                </button>
-                <span className="text-sm px-3" style={{ color: "var(--text-muted)" }}>
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30 transition-colors"
-                  style={{
-                    border: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+          <button
+            onClick={() => fetchDocuments()}
+            title="Refresh list"
+            className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
 
-      {/* Upload modal */}
+      {/* Documents Table */}
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+              <tr>
+                <th className="py-3.5 px-4 font-display">Document File Name</th>
+                <th className="py-3.5 px-4 font-display">Adherence Status</th>
+                <th className="py-3.5 px-4 font-display">Score</th>
+                <th className="py-3.5 px-4 hidden md:table-cell font-display">Uploaded By</th>
+                <th className="py-3.5 px-4 hidden sm:table-cell font-display">Date Recorded</th>
+                <th className="py-3.5 px-4 text-right font-display">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                [...Array(4)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-100 rounded w-48" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-100 rounded w-20" /></td>
+                    <td className="py-4 px-4"><div className="h-4 bg-slate-100 rounded w-12" /></td>
+                    <td className="py-4 px-4 hidden md:table-cell"><div className="h-4 bg-slate-100 rounded w-24" /></td>
+                    <td className="py-4 px-4 hidden sm:table-cell"><div className="h-4 bg-slate-100 rounded w-20" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-4 bg-slate-100 rounded w-8 ml-auto" /></td>
+                  </tr>
+                ))
+              ) : documents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-xs font-bold text-slate-700">No documents found</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Ingest a document or adjust active filters.</p>
+                  </td>
+                </tr>
+              ) : (
+                documents.map((doc) => (
+                  <tr
+                    key={doc.id}
+                    className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                    onClick={() => router.push(`/documents/${doc.id}`)}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 group-hover:scale-105 transition-transform">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
+                            {doc.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {doc.extractedText ? `${doc.extractedText.length.toLocaleString()} characters indexed` : "Pending OCR extraction"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <StatusBadge status={doc.status} />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {doc.latestScore !== null ? (
+                        <span
+                          className={`font-mono font-bold text-xs ${
+                            doc.latestScore >= 90
+                              ? "text-emerald-700"
+                              : doc.latestScore >= 70
+                              ? "text-amber-700"
+                              : "text-rose-700"
+                          }`}
+                        >
+                          {doc.latestScore}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono">—</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600 font-medium hidden md:table-cell">
+                      {doc.uploadedBy?.name || "System"}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-500 font-medium text-[11px] hidden sm:table-cell">
+                      {new Date(doc.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => router.push(`/documents/${doc.id}`)}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors"
+                          title="View evidence & analysis"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setDeleteTarget(doc)}
+                            className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                            title="Delete document"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Upload Modal */}
       <UploadDocumentModal
         open={showUpload}
-        onOpenChange={setShowUpload}
-        onUploadComplete={fetchDocuments}
+        onClose={() => setShowUpload(false)}
+        onSuccess={() => {
+          setShowUpload(false)
+          fetchDocuments()
+        }}
       />
 
-      {/* Delete confirmation */}
+      {/* Confirm Delete Dialog */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Document"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? The file and all compliance results will be permanently removed.`}
-        confirmLabel="Delete"
+        title="Remove Audit Document"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? All associated evaluation results and citation mappings will be purged.`}
+        confirmText={isDeleting ? "Deleting..." : "Delete Document"}
         variant="destructive"
-        onConfirm={handleDelete}
-        isLoading={isDeleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   )

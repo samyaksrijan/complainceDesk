@@ -10,17 +10,21 @@ import {
 } from "@/components/ui/dialog"
 import { FileDropzone } from "@/components/ui/file-dropzone"
 import { toast } from "sonner"
-import { Upload, CheckCircle } from "lucide-react"
+import { Upload, CheckCircle2, ArrowRight } from "lucide-react"
 
 interface UploadDocumentModalProps {
   open: boolean
-  onOpenChange: (open: boolean) => void
-  onUploadComplete: () => void
+  onClose?: () => void
+  onOpenChange?: (open: boolean) => void
+  onSuccess?: () => void
+  onUploadComplete?: () => void
 }
 
 export function UploadDocumentModal({
   open,
+  onClose,
   onOpenChange,
+  onSuccess,
   onUploadComplete,
 }: UploadDocumentModalProps) {
   const [name, setName] = useState("")
@@ -37,26 +41,23 @@ export function UploadDocumentModal({
     setError("")
   }
 
-  const handleClose = (open: boolean) => {
-    if (!open && !isUploading) {
+  const handleCloseDialog = (isOpen: boolean) => {
+    if (!isOpen && !isUploading) {
       resetForm()
+      if (onClose) onClose()
+      if (onOpenChange) onOpenChange(false)
     }
-    onOpenChange(open)
   }
 
   const handleUpload = async () => {
     setError("")
 
     if (!name.trim()) {
-      setError("Document name is required")
-      return
-    }
-    if (name.length > 255) {
-      setError("Document name must be 255 characters or less")
+      setError("Document title is required")
       return
     }
     if (!file) {
-      setError("Please select a file")
+      setError("Please select an audit document file")
       return
     }
 
@@ -70,24 +71,23 @@ export function UploadDocumentModal({
       const res = await fetch("/api/documents/upload", {
         method: "POST",
         body: formData,
-        // Do NOT set Content-Type header — browser sets it 
-        // automatically with the correct boundary for FormData
       })
 
       if (!res.ok) {
-        const errorData = await res.json()
+        const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || "Upload failed")
       }
 
       setUploadSuccess(true)
-      toast.success("Document uploaded successfully")
+      toast.success("Audit document ingested and text extracted")
 
-      // Brief delay to show success state, then close
       setTimeout(() => {
         resetForm()
-        onOpenChange(false)
-        onUploadComplete()
-      }, 1200)
+        if (onClose) onClose()
+        if (onOpenChange) onOpenChange(false)
+        if (onSuccess) onSuccess()
+        if (onUploadComplete) onUploadComplete()
+      }, 1000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -95,152 +95,84 @@ export function UploadDocumentModal({
     }
   }
 
-  // Input styling
-  const inputStyle = {
-    background: "var(--bg-deep)",
-    border: "1px solid var(--border)",
-    color: "var(--text-primary)",
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent
-        className="sm:max-w-lg"
-        style={{
-          background: "var(--bg-elevated)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle style={{ color: "var(--text-primary)" }}>
-            Upload Document
-          </DialogTitle>
-          <DialogDescription style={{ color: "var(--text-muted)" }}>
-            Upload an audit or compliance document for evaluation.
+    <Dialog open={open} onOpenChange={handleCloseDialog}>
+      <DialogContent className="sm:max-w-md bg-white border border-slate-200 text-slate-900 p-6 rounded-2xl shadow-xl font-sans">
+        <DialogHeader className="space-y-1">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="h-8 w-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+              <Upload className="h-4 w-4" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-slate-900 tracking-tight font-display">
+              Ingest Audit Documentation
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-xs text-slate-500 font-medium">
+            Upload inspection reports, audit certificates, or policy files for automated rule verification.
           </DialogDescription>
         </DialogHeader>
 
         {uploadSuccess ? (
-          /* Success state */
-          <div className="flex flex-col items-center py-8 animate-fade-in">
-            <div
-              className="h-16 w-16 rounded-full flex items-center justify-center mb-4"
-              style={{
-                background: "rgba(34, 197, 94, 0.1)",
-                border: "2px solid var(--green-600)",
-              }}
-            >
-              <CheckCircle className="h-8 w-8" style={{ color: "var(--success)" }} />
+          <div className="py-8 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="h-6 w-6" />
             </div>
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-              Document uploaded!
-            </p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              Text extraction is processing in the background.
-            </p>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 font-display">Ingestion Complete</h4>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Text indexed and ready for standard matching.</p>
+            </div>
           </div>
         ) : (
-          /* Form state */
-          <div className="space-y-5 mt-2">
-            {error && (
-              <div
-                className="rounded-lg px-4 py-3 text-sm animate-fade-in"
-                style={{
-                  background: "rgba(248, 113, 113, 0.1)",
-                  border: "1px solid rgba(248, 113, 113, 0.2)",
-                  color: "var(--error)",
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            {/* Document name */}
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">
-                Document name <span style={{ color: "var(--error)" }}>*</span>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Document Display Title
               </label>
               <input
                 type="text"
+                placeholder="e.g. Skyline Tower Q3 Fire Safety Inspection"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Q3 Environmental Audit Report"
-                maxLength={255}
-                className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all duration-200"
-                style={inputStyle}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "var(--green-500)"
-                  e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow-green)"
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.boxShadow = "none"
-                }}
-                disabled={isUploading}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
               />
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                {name.length}/255 characters
-              </p>
             </div>
 
-            {/* File dropzone */}
-            <div>
-              <label className="block text-sm font-medium text-secondary mb-2">
-                File <span style={{ color: "var(--error)" }}>*</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Audit File Attachment
               </label>
               <FileDropzone
-                file={file}
-                onFileSelect={setFile}
-                onFileRemove={() => setFile(null)}
-                disabled={isUploading}
+                onFileSelected={(f) => {
+                  setFile(f)
+                  if (!name && f?.name) {
+                    setName(f.name.replace(/\.[^/.]+$/, ""))
+                  }
+                }}
               />
             </div>
 
-            {/* Upload button */}
-            <div className="flex justify-end gap-3 pt-2">
+            {error && (
+              <p className="text-xs text-rose-600 font-medium bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                {error}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
-                onClick={() => handleClose(false)}
-                disabled={isUploading}
-                className="px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                style={{
-                  border: "1px solid var(--border)",
-                  color: "var(--text-secondary)",
-                }}
+                type="button"
+                onClick={() => handleCloseDialog(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleUpload}
-                disabled={isUploading || !file || !name.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: "var(--green-600)", color: "white" }}
-                onMouseEnter={(e) => {
-                  if (!isUploading && file && name.trim()) {
-                    e.currentTarget.style.background = "var(--green-500)"
-                    e.currentTarget.style.transform = "translateY(-1px)"
-                    e.currentTarget.style.boxShadow = "0 4px 12px var(--glow-green)"
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--green-600)"
-                  e.currentTarget.style.transform = "translateY(0)"
-                  e.currentTarget.style.boxShadow = "none"
-                }}
+                disabled={isUploading}
+                className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                {isUploading ? (
-                  <>
-                    <div
-                      className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
-                      style={{ borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }}
-                    />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Upload Document
-                  </>
-                )}
+                {isUploading ? "Extracting & Ingesting…" : "Ingest Document"}
+                <ArrowRight className="h-3.5 w-3.5 text-amber-400" />
               </button>
             </div>
           </div>

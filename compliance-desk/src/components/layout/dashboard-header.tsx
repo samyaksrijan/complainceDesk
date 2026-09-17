@@ -3,108 +3,80 @@
 import { usePathname } from "next/navigation"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { CommandPalette, useCommandPalette } from "@/components/layout/command-palette"
-import { Search, Menu } from "lucide-react"
+import { Search, Menu, Shield } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 
 // Map paths to human-readable page names
-function getPageTitle(pathname: string): string {
-  if (pathname === "/dashboard") return "Dashboard"
-  if (pathname.startsWith("/documents") && pathname !== "/documents") return "Document Detail"
-  if (pathname === "/documents") return "Documents"
-  if (pathname.startsWith("/checklists/new")) return "Create Checklist"
-  if (pathname.match(/\/checklists\/.+\/edit/)) return "Edit Checklist"
-  if (pathname.match(/\/checklists\/.+/)) return "Checklist Detail"
-  if (pathname === "/checklists") return "Checklists"
-  if (pathname === "/audit-log") return "Audit Log"
-  if (pathname === "/settings") return "Settings"
-  if (pathname === "/admin/users") return "User Management"
-  if (pathname === "/notifications") return "Notifications"
-  if (pathname.startsWith("/reports") && pathname !== "/reports") return "Report Detail"
-  if (pathname === "/reports") return "Reports"
-  return ""
+function getPageTitle(pathname: string): { section: string; title: string } {
+  if (pathname === "/dashboard") return { section: "Governance", title: "Overview Dashboard" }
+  if (pathname.startsWith("/documents") && pathname !== "/documents") return { section: "Audit Documents", title: "Evidence Verification Studio" }
+  if (pathname === "/documents") return { section: "Audit Documents", title: "Document Repository" }
+  if (pathname.startsWith("/checklists/new")) return { section: "Compliance Standards", title: "Rule Builder & Policy Ingestion" }
+  if (pathname.match(/\/checklists\/.+\/edit/)) return { section: "Compliance Standards", title: "Edit Checklist Criteria" }
+  if (pathname.match(/\/checklists\/.+/)) return { section: "Compliance Standards", title: "Standard Specification" }
+  if (pathname === "/checklists") return { section: "Compliance Standards", title: "Regulatory Checklists" }
+  if (pathname === "/audit-log") return { section: "Governance", title: "Immutable Audit Trail" }
+  if (pathname === "/settings") return { section: "Configuration", title: "System Preferences" }
+  if (pathname === "/admin/users") return { section: "Organization", title: "User Governance & Access" }
+  if (pathname === "/notifications") return { section: "Governance", title: "System Alerts & Activity" }
+  if (pathname.startsWith("/reports") && pathname !== "/reports") return { section: "Executive Reports", title: "Compliance Audit Certificate" }
+  if (pathname === "/reports") return { section: "Executive Reports", title: "Compliance Reports" }
+  return { section: "Workspace", title: "Compliance Desk" }
 }
 
 export function DashboardHeader() {
   const pathname = usePathname()
-  const title = getPageTitle(pathname)
+  const { section, title } = getPageTitle(pathname)
   const { open, setOpen } = useCommandPalette()
 
   return (
     <>
       <header
-        className="flex items-center justify-between px-8 py-3 flex-shrink-0"
-        style={{
-          borderBottom: "1px solid var(--border)",
-          background: "var(--bg-deep)",
-          backdropFilter: "blur(12px)",
-          minHeight: "56px",
-        }}
+        className="flex items-center justify-between px-6 py-3 flex-shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-md min-h-[56px] font-sans"
       >
         <div className="flex items-center gap-3">
           {/* Mobile Sidebar Trigger */}
           <Sheet>
             <SheetTrigger asChild>
               <button 
-                className="lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-surface text-text-muted transition-colors"
+                className="lg:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
                 aria-label="Open navigation menu"
               >
                 <Menu className="h-5 w-5" />
               </button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-64 bg-elevated border-r border-border [&>button]:hidden">
+            <SheetContent side="left" className="p-0 w-64 bg-white border-r border-slate-200 [&>button]:hidden">
               <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
               <Sidebar />
             </SheetContent>
           </Sheet>
 
           {/* Breadcrumb / Page title */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium hidden sm:inline-block" style={{ color: "var(--text-muted)" }}>
-              Compliance Desk
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400 font-medium hidden sm:inline-block">
+              {section}
             </span>
-            {title && (
-              <>
-                <span className="hidden sm:inline-block" style={{ color: "var(--border)" }}>/</span>
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {title}
-                </span>
-              </>
-            )}
+            <span className="text-slate-300 hidden sm:inline-block">/</span>
+            <span className="font-bold text-slate-900 tracking-tight font-display">
+              {title}
+            </span>
           </div>
         </div>
 
         {/* Right side actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Cmd+K Search Button */}
           <button
             onClick={() => setOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text-muted)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--border-focus)"
-              e.currentTarget.style.color = "var(--text-secondary)"
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.color = "var(--text-muted)"
-            }}
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition-all bg-slate-50 border border-slate-200 text-slate-500 hover:border-amber-500/50 hover:text-slate-900 shadow-sm"
             aria-label="Open command palette (Ctrl+K)"
             title="Command Palette (Ctrl+K)"
           >
-            <Search className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Search…</span>
+            <Search className="h-3.5 w-3.5 text-slate-400" />
+            <span className="hidden sm:inline">Search regulations, audits, criteria…</span>
             <kbd
-              className="hidden sm:inline px-1 rounded text-[10px] font-mono"
-              style={{
-                background: "var(--bg-deep)",
-                border: "1px solid var(--border)",
-                color: "var(--text-muted)",
-              }}
+              className="hidden sm:inline px-1.5 py-0.5 rounded text-[10px] font-mono bg-white border border-slate-200 text-slate-500 font-semibold"
             >
               ⌘K
             </kbd>

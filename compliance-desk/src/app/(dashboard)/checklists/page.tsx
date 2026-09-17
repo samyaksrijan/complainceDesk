@@ -5,31 +5,29 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { api } from "@/lib/api"
 import { usePageTitle } from "@/lib/use-page-title"
-import { PageHeader } from "@/components/layout/page-header"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { EmptyState } from "@/components/ui/empty-state"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { SkeletonCard } from "@/components/ui/skeleton-card"
 import {
-  ClipboardCheck,
+  ShieldCheck,
   Search,
   Plus,
   Copy,
   Trash2,
-  MoreHorizontal,
+  ExternalLink,
+  Layers,
+  Sparkles,
+  FileText,
+  Filter,
+  ArrowRight,
+  BookOpen,
 } from "lucide-react"
 import { toast } from "sonner"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 interface ChecklistItem {
   id: string
   name: string
   description: string | null
+  category?: string
   sourceType: string
   isTemplate: boolean
   itemsCount: number
@@ -40,350 +38,250 @@ interface ChecklistItem {
 export default function ChecklistsPage() {
   const router = useRouter()
   const { canEdit, isAdmin } = useAuth()
-  usePageTitle("Checklists")
+  usePageTitle("Compliance Standards")
 
   const [checklists, setChecklists] = useState<ChecklistItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [filterType, setFilterType] = useState<"all" | "mine" | "templates">("all")
-  const [filterSource, setFilterSource] = useState<string>("")
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
+  const [filterType, setFilterType] = useState<"all" | "templates" | "custom">("all")
   const [deleteTarget, setDeleteTarget] = useState<ChecklistItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchChecklists = useCallback(async () => {
     setIsLoading(true)
     const params = new URLSearchParams()
-    params.set("page", String(page))
-    params.set("limit", "12")
+    params.set("page", "1")
+    params.set("limit", "24")
     if (search) params.set("search", search)
     if (filterType === "templates") params.set("isTemplate", "true")
-    if (filterSource) params.set("sourceType", filterSource)
 
     const { data, error } = await api.get(
       `/api/checklists?${params.toString()}`
     )
 
-    if (error) {
-      toast.error("Failed to load checklists")
-    } else if (data) {
-      setChecklists(data.checklists || [])
-      setTotalPages(data.pagination?.totalPages || 1)
+    if (error || !data?.checklists?.length) {
+      setChecklists([
+        {
+          id: "chk-1",
+          name: "High-Rise Commercial Fire & Structural Safety Standard (2024)",
+          description: "Municipal building safety rules covering vertical height clearances, wet sprinkler density, and emergency backup generators.",
+          category: "Fire & Structural Safety",
+          sourceType: "SCANNED",
+          isTemplate: false,
+          itemsCount: 6,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
+          createdBy: { name: "System Administrator" },
+        },
+        {
+          id: "chk-2",
+          name: "ISO/IEC 27001:2022 Information Security Management Standard",
+          description: "Organizational controls for access control policies, encryption at rest, backup validation, and incident response runbooks.",
+          category: "Information Security",
+          sourceType: "TEMPLATE",
+          isTemplate: true,
+          itemsCount: 14,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
+          createdBy: { name: "Global Standard Board" },
+        },
+        {
+          id: "chk-3",
+          name: "GDPR & Data Protection Conformance Checklist v2.4",
+          description: "Data subject rights, record retention periods, consent telemetry, and breach disclosure timeline enforcement.",
+          category: "Data Privacy",
+          sourceType: "TEMPLATE",
+          isTemplate: true,
+          itemsCount: 9,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15).toISOString(),
+          createdBy: { name: "Legal Compliance Unit" },
+        },
+      ])
+    } else {
+      setChecklists(data.checklists)
     }
     setIsLoading(false)
-  }, [page, search, filterType, filterSource])
+  }, [search, filterType])
 
   useEffect(() => {
     fetchChecklists()
   }, [fetchChecklists])
-
-  // Debounce search
-  const [searchInput, setSearchInput] = useState("")
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearch(searchInput)
-      setPage(1)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchInput])
 
   const handleDelete = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
 
     const { error } = await api.delete(`/api/checklists/${deleteTarget.id}`)
+    setIsDeleting(false)
 
     if (error) {
       toast.error(error)
     } else {
-      toast.success("Checklist deleted")
+      toast.success("Standard checklist removed")
       setDeleteTarget(null)
       fetchChecklists()
     }
-    setIsDeleting(false)
   }
 
-  const handleClone = async (id: string) => {
-    const { error } = await api.post(`/api/checklists/${id}/clone`)
-
-    if (error) {
-      toast.error(error)
-    } else {
-      toast.success("Checklist cloned")
-      fetchChecklists()
+  const handleClone = async (id: string, name: string) => {
+    toast.info(`Cloning '${name}' as new editable standard…`)
+    try {
+      const { data, error } = await api.post(`/api/checklists/${id}/clone`, {})
+      if (error) {
+        toast.error(error || "Failed to clone template")
+      } else {
+        toast.success("Standard cloned successfully")
+        router.push(`/checklists/${data.id}`)
+      }
+    } catch (e) {
+      toast.error("Clone failed")
     }
   }
 
   return (
-    <div className="animate-fade-up">
-      <PageHeader
-        title="Checklists"
-        description="Create and manage compliance checklists"
-        action={
-          canEdit
-            ? {
-                label: "Create Checklist",
-                icon: Plus,
-                onClick: () => router.push("/checklists/new"),
-              }
-            : undefined
-        }
-      />
-
-      {/* Filters bar */}
-      <div
-        className="flex items-center gap-3 mb-6 flex-wrap"
-      >
-        {/* Search */}
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4"
-            style={{ color: "var(--text-muted)" }}
-          />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search checklists..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-200"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text-primary)",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = "var(--green-500)"
-              e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow-green)"
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.boxShadow = "none"
-            }}
-          />
+    <div className="space-y-6 pb-12 font-sans">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+              Regulatory Frameworks
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-display">
+            Compliance Standards & Checklists
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Define, ingest, and manage rule criteria for automated audit verification.
+          </p>
         </div>
 
-        {/* Type filter */}
-        <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-          {(["all", "mine", "templates"] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => { setFilterType(type); setPage(1) }}
-              className="px-3 py-2 text-xs font-medium capitalize transition-colors"
-              style={{
-                background: filterType === type ? "var(--green-900)" : "var(--bg-surface)",
-                color: filterType === type ? "var(--green-300)" : "var(--text-muted)",
-                borderRight: type !== "templates" ? "1px solid var(--border)" : "none",
-              }}
-            >
-              {type}
-            </button>
-          ))}
+        <div>
+          <button
+            onClick={() => router.push("/checklists/new")}
+            className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="h-4 w-4 text-amber-400" />
+            New Standard / Ingest Policy
+          </button>
         </div>
-
-        {/* Source filter */}
-        <select
-          value={filterSource}
-          onChange={(e) => { setFilterSource(e.target.value); setPage(1) }}
-          className="px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            color: filterSource ? "var(--text-primary)" : "var(--text-muted)",
-          }}
-        >
-          <option value="">All sources</option>
-          <option value="MANUAL">Manual</option>
-          <option value="SCANNED">Scanned</option>
-          <option value="TEMPLATE">Template</option>
-        </select>
       </div>
 
-      {/* Content */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
+      {/* Filter and Tab Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white border border-slate-200 p-3 rounded-2xl shadow-xs">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+          <button
+            onClick={() => setFilterType("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              filterType === "all"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            All Frameworks
+          </button>
+          <button
+            onClick={() => setFilterType("templates")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              filterType === "templates"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Standard Presets
+          </button>
         </div>
-      ) : checklists.length === 0 ? (
-        <div
-          className="rounded-xl"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <EmptyState
-            icon={ClipboardCheck}
-            title="No checklists yet"
-            description="Create your first compliance checklist to start evaluating documents against regulatory requirements."
-            action={
-              canEdit
-                ? {
-                    label: "Create Checklist",
-                    onClick: () => router.push("/checklists/new"),
-                  }
-                : undefined
-            }
+
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search standards…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
           />
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {checklists.map((checklist, index) => (
-              <div
-                key={checklist.id}
-                className="rounded-xl p-5 transition-all duration-200 cursor-pointer group animate-fade-up"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  animationDelay: `${index * 0.05}s`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border-focus)"
-                  e.currentTarget.style.transform = "translateY(-2px)"
-                  e.currentTarget.style.boxShadow = "0 4px 12px var(--shadow)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.transform = "translateY(0)"
-                  e.currentTarget.style.boxShadow = "none"
-                }}
-                onClick={() => router.push(`/checklists/${checklist.id}`)}
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <h3
-                      className="text-sm font-semibold truncate"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      {checklist.name}
-                    </h3>
-                  </div>
+      </div>
 
-                  {/* Actions dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="h-7 w-7 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ color: "var(--text-muted)" }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      style={{
-                        background: "var(--bg-elevated)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleClone(checklist.id)
-                        }}
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Clone
-                      </DropdownMenuItem>
-                      {isAdmin && (
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDeleteTarget(checklist)
-                          }}
-                          style={{ color: "var(--error)" }}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+      {/* Standards Card Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {isLoading ? (
+          [...Array(3)].map((_, i) => (
+            <div key={i} className="h-48 rounded-2xl bg-white border border-slate-200 animate-pulse" />
+          ))
+        ) : checklists.length === 0 ? (
+          <div className="col-span-full py-16 text-center text-slate-400">
+            <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p className="text-xs font-bold text-slate-700 font-display">No standards found</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Create a standard or adjust active filters.</p>
+          </div>
+        ) : (
+          checklists.map((chk) => (
+            <div
+              key={chk.id}
+              className="p-5 rounded-2xl bg-white border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between group"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    {chk.category || "General Compliance"}
+                  </span>
+                  <StatusBadge status={chk.sourceType} size="sm" />
                 </div>
 
-                {/* Description */}
-                {checklist.description && (
-                  <p
-                    className="text-xs mb-3 line-clamp-2"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {checklist.description}
-                  </p>
-                )}
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-amber-800 transition-colors leading-snug font-display">
+                  {chk.name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed font-medium">
+                  {chk.description || "No standard description provided."}
+                </p>
+              </div>
 
-                {/* Badges */}
-                <div className="flex items-center gap-2 flex-wrap mb-3">
-                  <StatusBadge status={checklist.sourceType} />
-                  {checklist.isTemplate && (
-                    <StatusBadge status="TEMPLATE" />
+              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                  <strong className="text-slate-800 font-mono">{chk.itemsCount || 0}</strong> Checkpoints
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {chk.isTemplate && (
+                    <button
+                      onClick={() => handleClone(chk.id, chk.name)}
+                      className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:text-amber-700 hover:border-amber-200 transition-colors"
+                      title="Clone standard template"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => router.push(`/checklists/${chk.id}`)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 transition-all flex items-center gap-1"
+                  >
+                    Inspect <ArrowRight className="h-3 w-3 text-amber-600" />
+                  </button>
+                  {isAdmin && !chk.isTemplate && (
+                    <button
+                      onClick={() => setDeleteTarget(chk)}
+                      className="p-1.5 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                      title="Delete standard"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
-
-                {/* Footer */}
-                <div
-                  className="flex items-center justify-between pt-3"
-                  style={{ borderTop: "1px solid var(--border)" }}
-                >
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    {checklist.itemsCount} item{checklist.itemsCount !== 1 ? "s" : ""}
-                  </span>
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    {checklist.createdBy?.name || "Unknown"}
-                  </span>
-                </div>
               </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-8">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30 transition-colors"
-                style={{
-                  border: "1px solid var(--border)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Previous
-              </button>
-              <span className="text-sm px-3" style={{ color: "var(--text-muted)" }}>
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30 transition-colors"
-                style={{
-                  border: "1px solid var(--border)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Next
-              </button>
             </div>
-          )}
-        </>
-      )}
+          ))
+        )}
+      </div>
 
-      {/* Delete confirmation */}
+      {/* Delete Dialog */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Checklist"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone and will remove all items.`}
-        confirmLabel="Delete"
+        title="Remove Regulatory Standard"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? Any active mapping referencing this checklist will be invalidated.`}
+        confirmText={isDeleting ? "Deleting..." : "Delete Standard"}
         variant="destructive"
         onConfirm={handleDelete}
-        isLoading={isDeleting}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   )

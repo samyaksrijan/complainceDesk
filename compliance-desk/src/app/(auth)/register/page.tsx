@@ -8,8 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { ShieldCheck, ArrowRight, Building, User, Mail, Lock } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -31,17 +30,17 @@ export default function RegisterPage() {
   const strength = calculateStrength(password);
   
   const getStrengthColor = () => {
-    if (strength <= 25) return "bg-red-500";
-    if (strength <= 50) return "bg-orange-500";
-    if (strength <= 75) return "bg-yellow-500";
-    return "bg-green-500";
+    if (strength <= 25) return "bg-rose-500";
+    if (strength <= 50) return "bg-amber-500";
+    if (strength <= 75) return "bg-amber-400";
+    return "bg-emerald-500";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (strength < 50) {
-      toast.error("Password is too weak. Must contain letters and numbers.");
+      toast.error("Password must contain at least 8 characters with letters and numbers.");
       return;
     }
 
@@ -61,7 +60,7 @@ export default function RegisterPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to register");
+        throw new Error(data.error || "Failed to register organization");
       }
 
       // Auto login after registration
@@ -72,10 +71,10 @@ export default function RegisterPage() {
       });
 
       if (result?.error) {
-        toast.error("Registered, but failed to auto-login");
+        toast.error("Account created. Please log in.");
         router.push("/login");
       } else {
-        toast.success("Account created successfully");
+        toast.success("Organization onboarded successfully");
         router.push("/dashboard");
         router.refresh();
       }
@@ -87,81 +86,125 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-3xl font-display font-bold">Create an account</CardTitle>
-        <CardDescription>
-          Enter your details below to create your account
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="orgName">Organization Name</Label>
-            <Input
-              id="orgName"
-              placeholder="Acme Corp"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              required
-            />
+    <div className="w-full bg-white border border-slate-200/90 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden font-sans my-4">
+      {/* Top Banner Header */}
+      <div className="p-6 text-center border-b border-slate-100 bg-slate-50/60">
+        <div className="inline-flex h-11 w-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 items-center justify-center shadow-md mb-2">
+          <ShieldCheck className="h-6 w-6 text-slate-950 stroke-[2.5]" />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 font-display">
+          Onboard New Organization
+        </h1>
+        <p className="text-[11px] uppercase tracking-wider text-amber-700 font-bold mt-0.5">
+          Deploy Your Dedicated Compliance Workspace
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4">
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="orgName" className="text-xs font-semibold text-slate-700">
+              Organization Name
+            </Label>
+            <div className="relative">
+              <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                id="orgName"
+                placeholder="Apex Global Technologies"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                required
+                className="pl-9 bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-amber-500 focus-visible:border-amber-500 h-9.5 text-xs font-medium"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="name">Your Name</Label>
-            <Input
-              id="name"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+
+          <div className="space-y-1">
+            <Label htmlFor="name" className="text-xs font-semibold text-slate-700">
+              Lead Officer Full Name
+            </Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                id="name"
+                placeholder="Dr. Eleanor Vance"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="pl-9 bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-amber-500 focus-visible:border-amber-500 h-9.5 text-xs font-medium"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="john@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+
+          <div className="space-y-1">
+            <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
+              Corporate Email Address
+            </Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="e.vance@apexglobal.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="pl-9 bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-amber-500 focus-visible:border-amber-500 h-9.5 text-xs font-medium"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+
+          <div className="space-y-1">
+            <Label htmlFor="password" className="text-xs font-semibold text-slate-700">
+              Master Security Password
+            </Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="Min 8 characters with letters & numbers"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="pl-9 bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-amber-500 focus-visible:border-amber-500 h-9.5 text-xs font-medium"
+              />
+            </div>
             {password.length > 0 && (
-              <div className="space-y-1 mt-2">
-                <Progress value={strength} className={`h-1.5 [&>div]:${getStrengthColor()}`} />
-                <p className="text-xs text-muted-foreground text-right">
-                  {strength <= 25 && "Weak"}
-                  {strength > 25 && strength <= 50 && "Fair"}
-                  {strength > 50 && strength <= 75 && "Good"}
-                  {strength > 75 && "Strong"}
-                </p>
+              <div className="space-y-1 pt-1.5">
+                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${getStrengthColor()}`}
+                    style={{ width: `${strength}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+                  <span>Complexity</span>
+                  <span className={strength >= 75 ? "text-emerald-600" : strength >= 50 ? "text-amber-600" : "text-rose-600"}>
+                    {strength <= 25 ? "Weak" : strength <= 50 ? "Fair" : strength <= 75 ? "Strong" : "Very Strong"}
+                  </span>
+                </div>
               </div>
             )}
           </div>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating account..." : "Create account"}
-          </Button>
-          <div className="text-sm text-center text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </div>
-        </CardFooter>
+        </div>
+
+        <Button 
+          type="submit" 
+          className="w-full bg-slate-950 hover:bg-slate-800 text-white font-bold h-10.5 shadow-sm transition-all cursor-pointer font-sans text-xs tracking-wide mt-2" 
+          disabled={loading}
+        >
+          {loading ? "Initializing Workspace..." : "Create Organization Workspace"}
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+
+        <div className="text-xs text-center text-slate-500 pt-1">
+          Already registered?{" "}
+          <Link href="/login" className="text-amber-700 hover:text-amber-800 font-bold underline underline-offset-4">
+            Sign In to Existing Workspace
+          </Link>
+        </div>
       </form>
-    </Card>
+    </div>
   );
 }

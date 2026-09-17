@@ -9,6 +9,7 @@ import {
   ChevronUp,
   ChevronDown,
   X,
+  Plus,
 } from "lucide-react"
 
 interface ChecklistItemEditorProps {
@@ -38,11 +39,10 @@ export function ChecklistItemEditor({
   const [isExpanded, setIsExpanded] = useState(true)
 
   const conditions = CONDITIONS_BY_TYPE[item.fieldType] || []
-  const hasThreshold = !["BOOLEAN"].includes(item.fieldType) || false
+  const hasThreshold = !["BOOLEAN"].includes(item.fieldType)
   const isRange = item.condition === "RANGE"
   const isSelect = item.fieldType === "SELECT"
 
-  // Add option to SELECT field
   const addOption = () => {
     const trimmed = optionInput.trim()
     if (trimmed && !item.options.includes(trimmed)) {
@@ -51,173 +51,104 @@ export function ChecklistItemEditor({
     }
   }
 
-  // Remove option
   const removeOption = (opt: string) => {
     onUpdate({ options: item.options.filter((o) => o !== opt) })
   }
 
-  // Input styling (reused)
-  const inputStyle = {
-    background: "var(--bg-deep)",
-    border: "1px solid var(--border)",
-    color: "var(--text-primary)",
-  }
-
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    e.currentTarget.style.borderColor = "var(--green-500)"
-    e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow-green)"
-  }
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    e.currentTarget.style.borderColor = "var(--border)"
-    e.currentTarget.style.boxShadow = "none"
-  }
-
   return (
-    <div
-      className="rounded-xl overflow-hidden transition-all duration-200"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-      }}
-    >
-      {/* Item header (always visible) */}
+    <div className="rounded-2xl overflow-hidden bg-white border border-slate-200/90 shadow-xs transition-all hover:border-slate-300 font-sans">
+      {/* Item header */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-        style={{ borderBottom: isExpanded ? "1px solid var(--border)" : "none" }}
+        className="flex items-center justify-between px-4 py-3 cursor-pointer bg-slate-50/70 border-b border-slate-100"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        {/* Index */}
-        <span
-          className="flex-shrink-0 h-6 w-6 rounded-md flex items-center justify-center text-xs font-semibold"
-          style={{
-            background: "var(--bg-elevated)",
-            color: "var(--text-muted)",
-          }}
-        >
-          {index + 1}
-        </span>
-
-        {/* Drag handle */}
-        <div
-          className="cursor-grab active:cursor-grabbing flex-shrink-0"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <GripVertical className="h-4 w-4" />
+        <div className="flex items-center gap-3">
+          <span className="flex-shrink-0 h-6 w-6 rounded-lg flex items-center justify-center text-xs font-bold bg-white border border-slate-200 text-amber-700 font-mono shadow-2xs">
+            {index + 1}
+          </span>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900 font-display">
+              {item.fieldName || `Checkpoint Criterion ${index + 1}`}
+            </h4>
+            <span className="text-[10px] text-slate-400 font-mono font-medium">
+              {item.fieldType} • {item.condition}
+            </span>
+          </div>
         </div>
 
-        {/* Item name preview */}
-        <span
-          className="flex-1 text-sm font-medium truncate"
-          style={{ color: item.name ? "var(--text-primary)" : "var(--text-muted)" }}
-        >
-          {item.name || "Untitled item"}
-        </span>
-
-        {/* Quick actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={(e) => { e.stopPropagation(); onMoveUp() }}
+            type="button"
+            onClick={onMoveUp}
             disabled={index === 0}
-            className="h-7 w-7 rounded flex items-center justify-center transition-colors disabled:opacity-20"
-            style={{ color: "var(--text-muted)" }}
+            className="p-1 rounded text-slate-400 hover:text-slate-900 disabled:opacity-30"
           >
             <ChevronUp className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onMoveDown() }}
+            type="button"
+            onClick={onMoveDown}
             disabled={index === totalItems - 1}
-            className="h-7 w-7 rounded flex items-center justify-center transition-colors disabled:opacity-20"
-            style={{ color: "var(--text-muted)" }}
+            className="p-1 rounded text-slate-400 hover:text-slate-900 disabled:opacity-30"
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDuplicate() }}
-            className="h-7 w-7 rounded flex items-center justify-center transition-colors"
-            style={{ color: "var(--text-muted)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+            type="button"
+            onClick={onDuplicate}
+            className="p-1 rounded text-slate-400 hover:text-amber-600"
+            title="Duplicate"
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="h-7 w-7 rounded flex items-center justify-center transition-colors"
-            style={{ color: "var(--text-muted)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--error)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+            type="button"
+            onClick={onDelete}
+            className="p-1 rounded text-slate-400 hover:text-rose-600"
+            title="Delete"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded body */}
       {isExpanded && (
-        <div className="p-4 space-y-4 animate-fade-in">
-          {/* Row 1: Name + Type */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Field Name <span style={{ color: "var(--error)" }}>*</span>
-              </label>
+        <div className="p-4 space-y-3.5 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-700">Criterion Field Name</label>
               <input
                 type="text"
-                value={item.name}
-                onChange={(e) => onUpdate({ name: e.target.value })}
-                placeholder="e.g., pH Level, Emission Certificate"
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-200"
-                style={{
-                  ...inputStyle,
-                  border: errors[`item_${index}_name`]
-                    ? "1px solid var(--error)"
-                    : "1px solid var(--border)",
-                }}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
+                placeholder="e.g. Emergency Lighting Autonomy"
+                value={item.fieldName}
+                onChange={(e) => onUpdate({ fieldName: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-medium"
               />
-              {errors[`item_${index}_name`] && (
-                <p className="text-xs mt-1" style={{ color: "var(--error)" }}>
-                  {errors[`item_${index}_name`]}
-                </p>
-              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Field Type <span style={{ color: "var(--error)" }}>*</span>
-              </label>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-700">Data Type</label>
               <select
                 value={item.fieldType}
                 onChange={(e) => onUpdate({ fieldType: e.target.value as any })}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 text-xs cursor-pointer"
               >
-                <option value="NUMBER">Number</option>
-                <option value="BOOLEAN">Boolean (Yes/No)</option>
-                <option value="TEXT">Text</option>
-                <option value="SELECT">Select (Dropdown)</option>
+                <option value="NUMBER">Number (Numeric Threshold)</option>
+                <option value="BOOLEAN">Boolean (Present / Confirmed)</option>
+                <option value="TEXT">Text (Clause Qualitative Match)</option>
+                <option value="SELECT">Select (Defined Value Set)</option>
               </select>
             </div>
           </div>
 
-          {/* Row 2: Condition + Threshold + Unit */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Condition */}
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Condition <span style={{ color: "var(--error)" }}>*</span>
-              </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-700">Condition Rule</label>
               <select
                 value={item.condition}
-                onChange={(e) => onUpdate({ condition: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
+                onChange={(e) => onUpdate({ condition: e.target.value as any })}
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 text-xs cursor-pointer"
               >
                 {conditions.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -227,223 +158,60 @@ export function ChecklistItemEditor({
               </select>
             </div>
 
-            {/* Threshold value — dynamic based on type */}
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                {item.fieldType === "BOOLEAN"
-                  ? "Value"
-                  : isRange
-                  ? "Min Value"
-                  : "Expected Value"}
-              </label>
+            {hasThreshold && !isRange && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700">Required Target Value</label>
+                <input
+                  type={item.fieldType === "NUMBER" ? "number" : "text"}
+                  placeholder="Target value"
+                  value={item.thresholdValue ?? ""}
+                  onChange={(e) => onUpdate({ thresholdValue: item.fieldType === "NUMBER" ? parseFloat(e.target.value) || 0 : e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
+                />
+              </div>
+            )}
 
-              {item.fieldType === "BOOLEAN" ? (
-                <div
-                  className="px-3 py-2 rounded-lg text-sm"
-                  style={{
-                    background: "var(--bg-deep)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  {item.condition === "MUST_BE_PRESENT" ? "Must be present" : "Must be true"}
-                </div>
-              ) : item.fieldType === "NUMBER" && isRange ? (
-                <div className="flex gap-2">
+            {hasThreshold && isRange && (
+              <div className="space-y-1 sm:col-span-2 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700">Min Bound</label>
                   <input
                     type="number"
                     value={Array.isArray(item.thresholdValue) ? item.thresholdValue[0] : 0}
-                    onChange={(e) =>
-                      onUpdate({
-                        thresholdValue: [
-                          parseFloat(e.target.value) || 0,
-                          Array.isArray(item.thresholdValue) ? item.thresholdValue[1] : 100,
-                        ],
-                      })
-                    }
-                    placeholder="Min"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={inputStyle}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
+                    onChange={(e) => {
+                      const max = Array.isArray(item.thresholdValue) ? item.thresholdValue[1] : 100
+                      onUpdate({ thresholdValue: [parseFloat(e.target.value) || 0, max] })
+                    }}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
                   />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700">Max Bound</label>
                   <input
                     type="number"
                     value={Array.isArray(item.thresholdValue) ? item.thresholdValue[1] : 100}
-                    onChange={(e) =>
-                      onUpdate({
-                        thresholdValue: [
-                          Array.isArray(item.thresholdValue) ? item.thresholdValue[0] : 0,
-                          parseFloat(e.target.value) || 100,
-                        ],
-                      })
-                    }
-                    placeholder="Max"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={inputStyle}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
+                    onChange={(e) => {
+                      const min = Array.isArray(item.thresholdValue) ? item.thresholdValue[0] : 0
+                      onUpdate({ thresholdValue: [min, parseFloat(e.target.value) || 0] })
+                    }}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
                   />
                 </div>
-              ) : item.fieldType === "NUMBER" ? (
-                <input
-                  type="number"
-                  value={item.thresholdValue ?? ""}
-                  onChange={(e) => onUpdate({ thresholdValue: parseFloat(e.target.value) || 0 })}
-                  placeholder="e.g., 50"
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={inputStyle}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                />
-              ) : item.fieldType === "TEXT" ? (
+              </div>
+            )}
+
+            {item.fieldType === "NUMBER" && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700">Unit</label>
                 <input
                   type="text"
-                  value={item.thresholdValue ?? ""}
-                  onChange={(e) => onUpdate({ thresholdValue: e.target.value })}
-                  placeholder={item.condition === "MUST_CONTAIN" ? 'e.g., "certified"' : 'e.g., "ISO 9001"'}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={{
-                    ...inputStyle,
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "13px",
-                  }}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
+                  placeholder="e.g. meters, kN/m²"
+                  value={item.unit || ""}
+                  onChange={(e) => onUpdate({ unit: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-medium"
                 />
-              ) : (
-                <select
-                  value={item.thresholdValue ?? ""}
-                  onChange={(e) => onUpdate({ thresholdValue: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer"
-                  style={inputStyle}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                >
-                  <option value="">Select expected value</option>
-                  {item.options.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              )}
-
-              {errors[`item_${index}_threshold`] && (
-                <p className="text-xs mt-1" style={{ color: "var(--error)" }}>
-                  {errors[`item_${index}_threshold`]}
-                </p>
-              )}
-            </div>
-
-            {/* Unit (NUMBER only) */}
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Unit {item.fieldType !== "NUMBER" && "(number only)"}
-              </label>
-              <input
-                type="text"
-                value={item.unit}
-                onChange={(e) => onUpdate({ unit: e.target.value })}
-                placeholder="e.g., mg/L, ppm, %"
-                disabled={item.fieldType !== "NUMBER"}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none disabled:opacity-40"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-            </div>
-          </div>
-
-          {/* Row 3: SELECT options */}
-          {isSelect && (
-            <div>
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Options <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {item.options.map((opt) => (
-                  <span
-                    key={opt}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium"
-                    style={{
-                      background: "var(--green-900)",
-                      color: "var(--green-300)",
-                    }}
-                  >
-                    {opt}
-                    <button
-                      onClick={() => removeOption(opt)}
-                      className="ml-0.5 hover:text-red-400 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={optionInput}
-                  onChange={(e) => setOptionInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") { e.preventDefault(); addOption() }
-                  }}
-                  placeholder="Type an option and press Enter"
-                  className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                  style={inputStyle}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                />
-                <button
-                  onClick={addOption}
-                  className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                  style={{
-                    border: "1px solid var(--border)",
-                    color: "var(--green-400)",
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-              {errors[`item_${index}_options`] && (
-                <p className="text-xs mt-1" style={{ color: "var(--error)" }}>
-                  {errors[`item_${index}_options`]}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Row 4: Description + Required toggle */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-secondary mb-1.5">
-                Description
-              </label>
-              <input
-                type="text"
-                value={item.description}
-                onChange={(e) => onUpdate({ description: e.target.value })}
-                placeholder="Optional helper text for auditors..."
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-            </div>
-
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer pb-2">
-                <input
-                  type="checkbox"
-                  checked={item.isRequired}
-                  onChange={(e) => onUpdate({ isRequired: e.target.checked })}
-                  className="rounded"
-                  style={{ accentColor: "var(--green-500)" }}
-                />
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  Required
-                </span>
-              </label>
-            </div>
+            )}
           </div>
         </div>
       )}
