@@ -1,27 +1,27 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { api } from "@/lib/api"
 import { toast } from "sonner"
+
+import { api } from "@/lib/api"
 import {
-  Bell,
-  ShieldCheck,
-  ShieldX,
-  Upload,
-  Trash2,
-  ListPlus,
-  ListFilter,
-  UserCog,
-  UserPlus,
-  CalendarDays,
-  Info,
-  X,
-  CheckCheck,
-  ArrowRight,
-  Wifi,
-  WifiOff,
+    ArrowRight,
+    Bell,
+    CalendarDays,
+    CheckCheck,
+    Info,
+    ListFilter,
+    ListPlus,
+    ShieldCheck,
+    ShieldX,
+    Trash2,
+    Upload,
+    UserCog,
+    UserPlus,
+    WifiOff,
+    X
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ export function NotificationBell() {
   }, [])
 
   useEffect(() => {
-    fetchUnreadCount()
+    void Promise.resolve().then(fetchUnreadCount)
     const interval = setInterval(fetchUnreadCount, 30000)
     return () => clearInterval(interval)
   }, [fetchUnreadCount])
@@ -138,7 +138,7 @@ export function NotificationBell() {
   }, [filter])
 
   useEffect(() => {
-    if (open) fetchNotifications()
+    if (open) void Promise.resolve().then(fetchNotifications)
   }, [open, fetchNotifications])
 
   // Close on Escape or outside click
@@ -160,9 +160,10 @@ export function NotificationBell() {
 
   const markRead = async (n: Notification) => {
     if (!n.read) {
+      const { error } = await api.put(`/api/notifications/${n.id}/read`)
+      if (error) { toast.error(error); return }
       setItems((prev) => prev.map((i) => i.id === n.id ? { ...i, read: true } : i))
       setUnreadCount((c) => Math.max(0, c - 1))
-      await api.put(`/api/notifications/${n.id}/read`)
     }
     const nav = getNavTarget(n)
     if (nav) { router.push(nav); setOpen(false) }
@@ -170,18 +171,20 @@ export function NotificationBell() {
 
   const dismiss = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    const { error } = await api.delete(`/api/notifications/${id}`)
+    if (error) { toast.error(error); return }
     const removed = items.find((i) => i.id === id)
     setItems((prev) => prev.filter((i) => i.id !== id))
     if (removed && !removed.read) setUnreadCount((c) => Math.max(0, c - 1))
-    await api.delete(`/api/notifications/${id}`)
   }
 
   const markAllRead = async () => {
     const unreadItems = items.filter((i) => !i.read)
     if (unreadItems.length === 0) return
+    const { error } = await api.put("/api/notifications/mark-all-read")
+    if (error) { toast.error(error); return }
     setItems((prev) => prev.map((i) => ({ ...i, read: true })))
     setUnreadCount(0)
-    await api.put("/api/notifications/mark-all-read")
   }
 
   const displayedItems = filter === "UNREAD" ? items.filter((i) => !i.read) : items

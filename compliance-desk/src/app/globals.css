@@ -3,6 +3,33 @@
 @plugin "tailwindcss-animate";
 
 @theme {
+  --color-brand-50: #f0f6f2;
+  --color-brand-100: #dfede5;
+  --color-brand-200: #bfd7ca;
+  --color-brand-300: #92b8a6;
+  --color-brand-400: #689884;
+  --color-brand-500: #487b68;
+  --color-brand-600: #365f51;
+  --color-brand-700: #2b4d43;
+  --color-brand-800: #253f37;
+  --color-brand-900: #20362f;
+  --color-brand-950: #14251f;
+  --color-slate-50: #f5f7f4;
+  --color-slate-100: #eef2ef;
+  --color-slate-200: #dce3df;
+  --color-slate-300: #c3cec7;
+  --color-slate-400: #81938a;
+  --color-slate-500: #677c72;
+  --color-slate-600: #52665d;
+  --color-slate-700: #3f544c;
+  --color-slate-800: #30453e;
+  --color-slate-900: #1e302e;
+  --color-slate-950: #182b27;
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-muted: var(--text-muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
@@ -37,8 +64,8 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: var(--font-body);
-  --font-display: var(--font-display);
-  --font-mono: var(--font-mono);
+  --font-display: var(--font-heading);
+  --font-mono: var(--font-code);
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
@@ -83,33 +110,33 @@
   }
 
   :root {
-    /* Executive Clean Light Theme */
-    --bg-deep:      #f1f5f9;     /* Slate 100 base */
-    --bg-base:      #f8fafc;     /* Slate 50 main canvas */
-    --bg-surface:   #ffffff;     /* Pure White cards */
-    --bg-elevated:  #ffffff;     /* Modals, menus, dropdowns */
-    
-    /* Borders */
-    --border-color: #e2e8f0;     /* Slate 200 border */
-    --border-focus: #f59e0b;     /* Warm Amber focus border */
-    
-    /* Brand Amber & Gold Spectrum */
-    --gold-50:      #fffbeb;
-    --gold-100:     #fef3c7;
-    --gold-200:     #fde68a;
-    --gold-300:     #fcd34d;
-    --gold-400:     #fbbf24;
-    --gold-500:     #f59e0b;
-    --gold-600:     #d97706;     /* Deep readable amber */
-    --gold-700:     #b45309;
-    --gold-800:     #92400e;
-    
-    /* Text Hierarchy */
-    --text-primary:   #0f172a;   /* Slate 900 bold text */
-    --text-secondary: #475569;   /* Slate 600 body text */
-    --text-muted:     #94a3b8;   /* Slate 400 placeholder & muted text */
-    --text-inverse:   #ffffff;   /* Pure white text */
-    
+    /* Eucalyptus / ink: the shared Compliance Desk identity. */
+    --bg-deep: #eef2ef;
+    --bg-base: #f7f8f5;
+    --bg-surface: #ffffff;
+    --bg-elevated: #ffffff;
+    --border-color: #dce3df;
+    --border-focus: #48786c;
+    --gold-50: #f0f6f2;
+    --gold-100: #dfede5;
+    --gold-200: #bfd7ca;
+    --gold-300: #92b8a6;
+    --gold-400: #689884;
+    --gold-500: #487b68;
+    --gold-600: #365f51;
+    --gold-700: #2b4d43;
+    --gold-800: #253f37;
+    --green-300: #487b68;
+    --green-400: #487b68;
+    --green-500: #487b68;
+    --green-600: #365f51;
+    --glow-green: #487b681a;
+    --glow-soft: #f0f6f2;
+    --text-primary: #1e302e;
+    --text-secondary: #52635e;
+    --text-muted: #6d7e77;
+    --text-inverse: #ffffff;
+
     /* Semantic Status (Light Tinted) */
     --success:      #059669;     /* Emerald 600 */
     --error:        #e11d48;     /* Rose 600 */
@@ -126,16 +153,16 @@
     --popover: var(--bg-elevated);
     --popover-foreground: var(--text-primary);
 
-    --primary: #0f172a;          /* Sleek black/slate primary action */
+    --primary: #365f51;          /* Sleek black/slate primary action */
     --primary-foreground: #ffffff;
 
-    --secondary: #f1f5f9;
+    --secondary: #eef2ef;
     --secondary-foreground: var(--text-primary);
 
-    --muted: #f8fafc;
+    --muted: #f2f5f1;
     --muted-foreground: var(--text-secondary);
 
-    --accent: #f8fafc;
+    --accent: #edf4ef;
     --accent-foreground: var(--gold-600);
 
     --destructive: var(--error);
@@ -222,4 +249,14 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+}
+
+@layer base {
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), [role="button"] { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
+  ::selection { background: #d6e8dc; color: #1e302e; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

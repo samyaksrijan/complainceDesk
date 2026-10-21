@@ -1,7 +1,7 @@
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { NextResponse } from "next/server"
 import { Role } from "@prisma/client"
+import { getServerSession } from "next-auth"
+import { NextResponse } from "next/server"
 
 export interface SessionUser {
   id: string
@@ -12,57 +12,26 @@ export interface SessionUser {
   orgName: string
 }
 
-type RouteHandler = (
-  req: Request,
-  context: { user: SessionUser; params?: Record<string, string> }
-) => Promise<NextResponse>
+type Params = Record<string, string>
+type RouteHandler<P extends Params> = (req: Request, context: { user: SessionUser; params: Promise<P> }) => Promise<Response>
 
-export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
-  return async (req: Request, context?: { params?: Record<string, string> }) => {
+export function withAuth<P extends Params = Params>(handler: RouteHandler<P>, allowedRoles?: Role[]) {
+  return async (req: Request, context: { params: Promise<P> }) => {
     try {
       const session = await getServerSession(authOptions)
-
-      if (!session?.user) {
-        return NextResponse.json(
-          { error: "Not authenticated", code: "UNAUTHORIZED" },
-          { status: 401 }
-        )
-      }
-
+      if (!session?.user?.id) return NextResponse.json({ error: "Not authenticated", code: "UNAUTHORIZED" }, { status: 401 })
       const user = session.user as SessionUser
-
-      if (allowedRoles && allowedRoles.length > 0) {
-        if (!allowedRoles.includes(user.role as Role)) {
-          return NextResponse.json(
-            { 
-              error: "You do not have permission to perform this action",
-              code: "FORBIDDEN" 
-            },
-            { status: 403 }
-          )
-        }
+      if (allowedRoles?.length && !allowedRoles.includes(user.role as Role)) {
+        return NextResponse.json({ error: "You do not have permission to perform this action", code: "FORBIDDEN" }, { status: 403 })
       }
-
-      return handler(req, { user, params: context?.params })
+      return await handler(req, { user, params: context.params })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Auth middleware error:", error)
-      return NextResponse.json(
-        { error: "Internal server error", code: "INTERNAL_ERROR" },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, { status: 500 })
     }
   }
 }
-
-// Convenience wrappers
-export function withAdmin(handler: RouteHandler) {
-  return withAuth(handler, [Role.ADMIN])
-}
-
-export function withAuditorOrAdmin(handler: RouteHandler) {
-  return withAuth(handler, [Role.ADMIN, Role.AUDITOR])
-}
-
-export function withAnyRole(handler: RouteHandler) {
-  return withAuth(handler) // no role restriction, just auth
-}
+export function withAdmin<P extends Params = Params>(handler: RouteHandler<P>) { return withAuth(handler, [Role.ADMIN]) }
+export function withAuditorOrAdmin<P extends Params = Params>(handler: RouteHandler<P>) { return withAuth(handler, [Role.ADMIN, Role.AUDITOR]) }
+export function withAnyRole<P extends Params = Params>(handler: RouteHandler<P>) { return withAuth(handler) }

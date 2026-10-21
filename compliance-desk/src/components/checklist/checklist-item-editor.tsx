@@ -1,16 +1,13 @@
 "use client"
 
+import {
+    ChevronDown,
+    ChevronUp,
+    Copy,
+    Trash2
+} from "lucide-react"
 import { useState } from "react"
 import { ChecklistItemData, CONDITIONS_BY_TYPE } from "./checklist-types"
-import {
-  GripVertical,
-  Copy,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  X,
-  Plus,
-} from "lucide-react"
 
 interface ChecklistItemEditorProps {
   item: ChecklistItemData
@@ -63,7 +60,7 @@ export function ChecklistItemEditor({
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
-          <span className="flex-shrink-0 h-6 w-6 rounded-lg flex items-center justify-center text-xs font-bold bg-white border border-slate-200 text-amber-700 font-mono shadow-2xs">
+          <span className="flex-shrink-0 h-6 w-6 rounded-lg flex items-center justify-center text-xs font-bold bg-white border border-slate-200 text-brand-700 font-mono shadow-2xs">
             {index + 1}
           </span>
           <div>
@@ -96,7 +93,7 @@ export function ChecklistItemEditor({
           <button
             type="button"
             onClick={onDuplicate}
-            className="p-1 rounded text-slate-400 hover:text-amber-600"
+            className="p-1 rounded text-slate-400 hover:text-brand-600"
             title="Duplicate"
           >
             <Copy className="h-3.5 w-3.5" />
@@ -123,7 +120,7 @@ export function ChecklistItemEditor({
                 placeholder="e.g. Emergency Lighting Autonomy"
                 value={item.fieldName}
                 onChange={(e) => onUpdate({ fieldName: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-medium"
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 text-xs font-medium"
               />
             </div>
 
@@ -131,8 +128,8 @@ export function ChecklistItemEditor({
               <label className="text-[11px] font-semibold text-slate-700">Data Type</label>
               <select
                 value={item.fieldType}
-                onChange={(e) => onUpdate({ fieldType: e.target.value as any })}
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 text-xs cursor-pointer"
+                onChange={(e) => onUpdate({ fieldType: e.target.value as ChecklistItemData["fieldType"] })}
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 text-xs cursor-pointer"
               >
                 <option value="NUMBER">Number (Numeric Threshold)</option>
                 <option value="BOOLEAN">Boolean (Present / Confirmed)</option>
@@ -147,8 +144,8 @@ export function ChecklistItemEditor({
               <label className="text-[11px] font-semibold text-slate-700">Condition Rule</label>
               <select
                 value={item.condition}
-                onChange={(e) => onUpdate({ condition: e.target.value as any })}
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 text-xs cursor-pointer"
+                onChange={(e) => onUpdate({ condition: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 text-xs cursor-pointer"
               >
                 {conditions.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -164,9 +161,9 @@ export function ChecklistItemEditor({
                 <input
                   type={item.fieldType === "NUMBER" ? "number" : "text"}
                   placeholder="Target value"
-                  value={item.thresholdValue ?? ""}
+                  value={String(item.thresholdValue ?? "")}
                   onChange={(e) => onUpdate({ thresholdValue: item.fieldType === "NUMBER" ? parseFloat(e.target.value) || 0 : e.target.value })}
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 text-xs font-mono font-semibold"
                 />
               </div>
             )}
@@ -182,7 +179,7 @@ export function ChecklistItemEditor({
                       const max = Array.isArray(item.thresholdValue) ? item.thresholdValue[1] : 100
                       onUpdate({ thresholdValue: [parseFloat(e.target.value) || 0, max] })
                     }}
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-brand-500 text-xs font-mono font-semibold"
                   />
                 </div>
                 <div>
@@ -194,12 +191,14 @@ export function ChecklistItemEditor({
                       const min = Array.isArray(item.thresholdValue) ? item.thresholdValue[0] : 0
                       onUpdate({ thresholdValue: [min, parseFloat(e.target.value) || 0] })
                     }}
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-amber-500 text-xs font-mono font-semibold"
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-brand-500 text-xs font-mono font-semibold"
                   />
                 </div>
               </div>
             )}
 
+            {isSelect && <div className="space-y-2 sm:col-span-2"><label className="text-xs font-semibold">Allowed values</label><div className="flex gap-2"><input aria-label={`New option for criterion ${index + 1}`} value={optionInput} onChange={e => setOptionInput(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" /><button type="button" onClick={addOption} className="rounded-lg border px-3">Add option</button></div><div className="flex flex-wrap gap-2">{item.options.map(option => <button type="button" key={option} onClick={() => removeOption(option)} className="rounded-full border px-3 py-1 text-xs" aria-label={`Remove option ${option}`}>{option} ×</button>)}</div></div>}
+            {errors[`item_${index}_name`] && <p role="alert" className="text-xs text-destructive">{errors[`item_${index}_name`]}</p>}
             {item.fieldType === "NUMBER" && (
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-700">Unit</label>
@@ -208,7 +207,7 @@ export function ChecklistItemEditor({
                   placeholder="e.g. meters, kN/m²"
                   value={item.unit || ""}
                   onChange={(e) => onUpdate({ unit: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 text-xs font-medium"
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 text-xs font-medium"
                 />
               </div>
             )}

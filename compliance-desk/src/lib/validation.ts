@@ -3,12 +3,13 @@ import { z } from "zod"
 // ==================== AUTH SCHEMAS ====================
 
 export const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   // Fix 27: Stronger password policy
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(128, "Password must be 128 characters or less")
+    .max(72, "Password must be 72 characters or less")
+    .refine(value => new TextEncoder().encode(value).length <= 72, "Password must be at most 72 UTF-8 bytes")
     .refine(
       (val) => /[A-Z]/.test(val) || /[a-z]/.test(val),
       "Password must contain at least one letter"
@@ -17,12 +18,12 @@ export const registerSchema = z.object({
       (val) => /[0-9]/.test(val),
       "Password must contain at least one number"
     ),
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  orgName: z.string().min(2, "Organization name must be at least 2 characters"),
+  name: z.string().transform(sanitizeText).pipe(z.string().min(2, "Name must be at least 2 characters").max(100)),
+  orgName: z.string().transform(sanitizeText).pipe(z.string().min(2, "Organization name must be at least 2 characters").max(100)),
 })
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 })
 
@@ -43,7 +44,7 @@ const conditionSchema = z.enum([
 ])
 
 export const checklistItemSchema = z.object({
-  fieldName: z.string().min(1, "Field name is required"),
+  fieldName: z.string().trim().min(1, "Field name is required").max(200),
   fieldType: fieldTypeSchema,
   unit: z.string().nullable().optional(),
   condition: conditionSchema,
@@ -54,7 +55,7 @@ export const checklistItemSchema = z.object({
     z.boolean(),
     z.array(z.number()),
   ]),
-  options: z.any().nullable().optional(),
+  options: z.array(z.string().trim().min(1)).nullable().optional(),
   sourceText: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1).nullable().optional(),
   regulationRef: z.string().nullable().optional(),
@@ -73,7 +74,7 @@ export const checklistItemSchema = z.object({
   // Validate threshold value matches field type
   if (item.fieldType === "NUMBER") {
     if (item.condition === "RANGE") {
-      if (!Array.isArray(item.thresholdValue) || item.thresholdValue.length !== 2) {
+      if (!Array.isArray(item.thresholdValue) || item.thresholdValue.length !== 2 || item.thresholdValue[0] > item.thresholdValue[1]) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "RANGE condition requires thresholdValue to be an array of two numbers [min, max]",
@@ -92,10 +93,10 @@ export const checklistItemSchema = z.object({
   }
 
   if (item.fieldType === "BOOLEAN") {
-    if (typeof item.thresholdValue !== "boolean") {
+    if (item.thresholdValue !== true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "BOOLEAN field type requires thresholdValue to be true or false",
+        message: "IS_TRUE and MUST_BE_PRESENT require a true target value",
         path: ["thresholdValue"],
       })
     }
@@ -109,7 +110,7 @@ export const checklistItemSchema = z.object({
         path: ["options"],
       })
     }
-    if (typeof item.thresholdValue !== "string") {
+    if (typeof item.thresholdValue !== "string" || !item.thresholdValue.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "SELECT field type requires thresholdValue to be a string (the expected value)",
@@ -118,8 +119,12 @@ export const checklistItemSchema = z.object({
     }
   }
 
+  if (item.fieldType === "SELECT" && typeof item.thresholdValue === "string" && item.options && !item.options.includes(item.thresholdValue)) {
+    ctx.addIssue({ code: "custom", message: "Expected value must be one of the allowed options", path: ["thresholdValue"] })
+  }
+
   if (item.fieldType === "TEXT") {
-    if (typeof item.thresholdValue !== "string") {
+    if (typeof item.thresholdValue !== "string" || !item.thresholdValue.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "TEXT field type requires thresholdValue to be a string",
@@ -130,12 +135,12 @@ export const checklistItemSchema = z.object({
 })
 
 export const createChecklistSchema = z.object({
-  name: z.string().min(2, "Checklist name must be at least 2 characters"),
+  name: z.string().trim().min(2, "Checklist name must be at least 2 characters").max(200),
   description: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
   tags: z.array(z.string()).default([]),
   isTemplate: z.boolean().default(false),
-  items: z.array(checklistItemSchema).min(1, "At least one checklist item is required"),
+  items: z.array(checklistItemSchema).min(1, "At least one checklist item is required").max(200),
 })
 
 export const updateChecklistSchema = z.object({
@@ -144,7 +149,7 @@ export const updateChecklistSchema = z.object({
   category: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   isTemplate: z.boolean().optional(),
-  items: z.array(checklistItemSchema).min(1).optional(),
+  items: z.array(checklistItemSchema).min(1).max(200).optional(),
 })
 
 export const checklistQuerySchema = z.object({

@@ -1,36 +1,25 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { PaginationControls } from "@/components/ui/pagination-controls"
+
+import { UploadDocumentModal } from "@/components/document/upload-document-modal"
 import { useAuth } from "@/components/providers/auth-provider"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { api } from "@/lib/api"
 import { usePageTitle } from "@/lib/use-page-title"
-import { StatusBadge } from "@/components/ui/status-badge"
-import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { UploadDocumentModal } from "@/components/document/upload-document-modal"
 import {
-  FileText,
-  Search,
-  Upload,
-  Trash2,
-  Eye,
-  Download,
-  MoreHorizontal,
-  ShieldCheck,
-  Filter,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  ArrowUpDown,
-  RefreshCw,
+    Eye,
+    FileText,
+    Filter,
+    RefreshCw,
+    Search,
+    Trash2,
+    Upload
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 interface DocumentItem {
   id: string
@@ -79,55 +68,21 @@ export default function DocumentsPage() {
     if (search) params.set("search", search)
     if (statusFilter) params.set("status", statusFilter)
 
-    const { data, error } = await api.get(
+    const { data, error } = await api.get<{ documents: DocumentItem[]; pagination: { totalPages: number; total: number } }>(
       `/api/documents?${params.toString()}`
     )
 
-    if (error) {
-      setDocuments([
-        {
-          id: "doc-1",
-          name: "Skyline Tower Q3 Fire & Structural Audit.pdf",
-          status: "COMPLIANT",
-          latestScore: 96.5,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-          updatedAt: new Date().toISOString(),
-          uploadedBy: { name: "Dr. Eleanor Vance" },
-          extractedText: "Full audit inspection text available...",
-        },
-        {
-          id: "doc-2",
-          name: "Global Operations ISO 27001 ISMS Review.pdf",
-          status: "NON_COMPLIANT",
-          latestScore: 68.0,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
-          updatedAt: new Date().toISOString(),
-          uploadedBy: { name: "Marcus Sterling" },
-          extractedText: "Security controls audit...",
-        },
-        {
-          id: "doc-3",
-          name: "West Wing Facility Environmental Assessment.pdf",
-          status: "PROCESSING",
-          latestScore: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          uploadedBy: { name: "Sarah Chen" },
-          extractedText: "Environmental safety check...",
-        },
-      ])
-      setTotalPages(1)
-      setTotal(3)
-    } else if (data) {
+    if (error) { toast.error(error); setDocuments([]); setTotal(0) }
+    else if (data) {
       setDocuments(data.documents || [])
-      setTotalPages(data.pagination?.totalPages || 1)
+      setTotalPages(Math.max(1, data.pagination?.totalPages || 1))
       setTotal(data.pagination?.total || 0)
     }
     setIsLoading(false)
   }, [page, search, statusFilter])
 
   useEffect(() => {
-    fetchDocuments()
+    void Promise.resolve().then(fetchDocuments)
   }, [fetchDocuments])
 
   // Debounce search
@@ -161,7 +116,7 @@ export default function DocumentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
               Evidence Repository
             </span>
           </div>
@@ -175,10 +130,11 @@ export default function DocumentsPage() {
 
         <div>
           <button
+            disabled={!canUpload}
             onClick={() => setShowUpload(true)}
             className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer font-sans"
           >
-            <Upload className="h-4 w-4 text-amber-400" />
+            <Upload className="h-4 w-4 text-brand-400" />
             Ingest Document
           </button>
         </div>
@@ -193,7 +149,7 @@ export default function DocumentsPage() {
             placeholder="Search by file name or keyword…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
           />
         </div>
 
@@ -205,7 +161,7 @@ export default function DocumentsPage() {
               setStatusFilter(e.target.value)
               setPage(1)
             }}
-            className="w-full sm:w-auto px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+            className="w-full sm:w-auto px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 cursor-pointer"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -267,11 +223,11 @@ export default function DocumentsPage() {
                   >
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 group-hover:scale-105 transition-transform">
+                        <div className="p-2 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 group-hover:scale-105 transition-transform">
                           <FileText className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
+                          <p className="font-bold text-slate-900 group-hover:text-brand-800 transition-colors">
                             {doc.name}
                           </p>
                           <p className="text-[10px] text-slate-400 font-medium">
@@ -290,7 +246,7 @@ export default function DocumentsPage() {
                             doc.latestScore >= 90
                               ? "text-emerald-700"
                               : doc.latestScore >= 70
-                              ? "text-amber-700"
+                              ? "text-brand-700"
                               : "text-rose-700"
                           }`}
                         >
@@ -334,6 +290,8 @@ export default function DocumentsPage() {
         </div>
       </div>
 
+      <PaginationControls page={page} totalPages={totalPages} total={total} onChange={setPage} />
+
       {/* Upload Modal */}
       <UploadDocumentModal
         open={showUpload}
@@ -349,10 +307,10 @@ export default function DocumentsPage() {
         open={!!deleteTarget}
         title="Remove Audit Document"
         description={`Are you sure you want to delete "${deleteTarget?.name}"? All associated evaluation results and citation mappings will be purged.`}
-        confirmText={isDeleting ? "Deleting..." : "Delete Document"}
+        confirmLabel={isDeleting ? "Deleting..." : "Delete Document"}
         variant="destructive"
         onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
       />
     </div>
   )

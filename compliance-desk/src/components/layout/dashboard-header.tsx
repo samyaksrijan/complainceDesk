@@ -1,11 +1,12 @@
 "use client"
 
-import { usePathname } from "next/navigation"
-import { NotificationBell } from "@/components/notifications/notification-bell"
 import { CommandPalette, useCommandPalette } from "@/components/layout/command-palette"
-import { Search, Menu, Shield } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
+import { NotificationBell } from "@/components/notifications/notification-bell"
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Menu, Search } from "lucide-react"
+import { useState } from "react"
+import { usePathname } from "next/navigation"
 
 // Map paths to human-readable page names
 function getPageTitle(pathname: string): { section: string; title: string } {
@@ -27,6 +28,7 @@ function getPageTitle(pathname: string): { section: string; title: string } {
 
 export function DashboardHeader() {
   const pathname = usePathname()
+  const [mobileOpen, setMobileOpen] = useState(false)
   const { section, title } = getPageTitle(pathname)
   const { open, setOpen } = useCommandPalette()
 
@@ -37,7 +39,7 @@ export function DashboardHeader() {
       >
         <div className="flex items-center gap-3">
           {/* Mobile Sidebar Trigger */}
-          <Sheet>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <button 
                 className="lg:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
@@ -46,8 +48,9 @@ export function DashboardHeader() {
                 <Menu className="h-5 w-5" />
               </button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-64 bg-white border-r border-slate-200 [&>button]:hidden">
+            <SheetContent side="left" className="p-0 w-64 bg-white border-r border-slate-200" onClickCapture={event => { if (event.target instanceof Element && event.target.closest("a")) setMobileOpen(false) }}>
               <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+              <SheetDescription className="sr-only">Navigate between your organization’s compliance modules.</SheetDescription>
               <Sidebar />
             </SheetContent>
           </Sheet>
@@ -69,7 +72,7 @@ export function DashboardHeader() {
           {/* Cmd+K Search Button */}
           <button
             onClick={() => setOpen(true)}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition-all bg-slate-50 border border-slate-200 text-slate-500 hover:border-amber-500/50 hover:text-slate-900 shadow-sm"
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition-all bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-500/50 hover:text-slate-900 shadow-sm"
             aria-label="Open command palette (Ctrl+K)"
             title="Command Palette (Ctrl+K)"
           >

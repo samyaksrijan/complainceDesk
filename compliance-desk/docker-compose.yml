@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: compliance_desk
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,6 +19,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/compliance_desk"
+    depends_on:
+      db:
+        condition: service_healthy
 
   # Application Service: Next.js Frontend & API
   app:
@@ -30,16 +40,23 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/compliance_desk"
       NEXTAUTH_URL: "http://localhost:3000"
-      NEXTAUTH_SECRET: "dev-secret-change-this-in-production-at-least-32-chars"
       GROQ_API_KEY: "${GROQ_API_KEY}"
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       LLM_PRIMARY_PROVIDER: "groq"
       LLM_FALLBACK_PROVIDER: "gemini"
       UPLOAD_DIR: "./uploads"
       NODE_ENV: "production"
+      STORAGE_DRIVER: "local"
+      ALLOW_LOCAL_STORAGE: "true"
+      ALLOW_HTTP: "true"
+      AWS_REGION: "${AWS_REGION:-ap-south-1}"
+      EMAIL_FROM: "${EMAIL_FROM:-local@example.invalid}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}"
     ports:
       - "3000:3000"
     volumes:

@@ -3,9 +3,10 @@ import path from "path"
 import { PrismaClient } from "@prisma/client"
 
 const prisma = new PrismaClient()
-const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || "uploads")
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || "uploads")
 
 async function cleanup() {
+  if (process.env.STORAGE_DRIVER === "s3") throw new Error("This cleanup command is only for local storage. Use a reviewed S3 inventory/lifecycle policy for object retention.")
   console.log("Scanning for orphaned files...")
   console.log(`Upload directory: ${UPLOAD_DIR}`)
 

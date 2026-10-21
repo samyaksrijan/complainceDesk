@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { prisma } from "@/lib/prisma";
+import { SessionUser, withAuth } from "@/lib/rbac";
+import { NextResponse } from "next/server";
 
 // PUT /api/notifications/[id]/read
 export const PUT = withAuth(
@@ -26,6 +26,7 @@ export const PUT = withAuth(
 
       return NextResponse.json(updated)
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Mark read error:", error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
@@ -53,6 +54,7 @@ export const DELETE = withAuth(
 
       return new NextResponse(null, { status: 204 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Dismiss notification error:", error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }

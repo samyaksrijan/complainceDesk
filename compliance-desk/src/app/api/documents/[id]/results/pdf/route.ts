@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { SessionUser } from "@/lib/rbac"
+import { Document, Page, renderToBuffer, StyleSheet, Text, View } from "@react-pdf/renderer"
+import { NextResponse } from "next/server"
 import React from "react"
-import { renderToBuffer } from "@react-pdf/renderer"
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer"
 
 // Register a font (optional, uses Helvetica by default)
 
@@ -157,7 +156,7 @@ function ComplianceReportPDF({
   checklistName: string
   orgName: string
   generatedAt: string
-  result: any
+  result: { overallScore: number; totalItems: number; passedItems: number; failedItems: number; notFoundItems: number; summary: string | null; items: Array<{ fieldName: string; status: string; expected: string; extractedValue: string; notes: string }> }
 }) {
   return React.createElement(
     Document,
@@ -237,7 +236,7 @@ function ComplianceReportPDF({
       ),
 
       // Table Rows
-      ...(result.items || []).map((item: any, index: number) =>
+      ...(result.items || []).map((item, index: number) =>
         React.createElement(
           View,
           {
@@ -332,7 +331,7 @@ export async function GET(
       .map((item) => {
         // Format expected value from checklist item
         let expected = "-"
-        const ci = item.checklistItem as any
+        const ci = item.checklistItem
         if (ci.condition && ci.thresholdValue !== null && ci.thresholdValue !== undefined) {
           const condLabel: Record<string, string> = {
             LESS_THAN: "<",
@@ -362,7 +361,7 @@ export async function GET(
 
     // Generate PDF
     const pdfBuffer = await renderToBuffer(
-      React.createElement(ComplianceReportPDF, {
+      ComplianceReportPDF({
         documentName: document.name,
         checklistName: result.checklist.name,
         orgName: document.org.name,
@@ -380,7 +379,7 @@ export async function GET(
     )
 
     // Return PDF
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
@@ -388,7 +387,9 @@ export async function GET(
         "Content-Length": String(pdfBuffer.length),
       },
     })
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("PDF export error:", error)
     return NextResponse.json(
       { error: "Failed to generate PDF", code: "INTERNAL_ERROR" },

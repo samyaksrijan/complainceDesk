@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { boundedFormData, PayloadTooLarge } from "@/lib/request-body"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { SessionUser } from "@/lib/rbac"
+import { extractText, getFileType, isSupportedFileType, isWithinSizeLimit } from "@/services/extraction"
 import { scanChecklistDocument } from "@/services/llm"
-import { extractText, getFileType, isSupportedFileType } from "@/services/extraction"
-import { saveFile, deleteFile } from "@/services/storage"
-import { checkRateLimit, RATE_LIMITS, getClientIp } from "@/lib/rate-limit"
+import { deleteFile, saveFile } from "@/services/storage"
+import { NextResponse } from "next/server"
 
 // POST /api/scan/checklist
 // Scan a compliance document and extract checklist fields.
@@ -34,8 +34,7 @@ export async function POST(req: Request) {
     }
 
     // Fix 7: Rate limit LLM-consuming endpoints
-    const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`scan:${ip}`, RATE_LIMITS.LLM_SCAN)
+    const rateLimit = await checkRateLimit(`scan:${user.id}`, RATE_LIMITS.LLM_SCAN)
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
@@ -48,7 +47,7 @@ export async function POST(req: Request) {
 
     if (contentType.includes("multipart/form-data")) {
       // File upload path
-      const formData = await req.formData()
+      const formData = await boundedFormData(req, (Number(process.env.MAX_FILE_SIZE_MB) || 10) * 1024 * 1024 + 1024 * 1024)
       const file = formData.get("file") as File | null
 
       if (!file) {
@@ -58,6 +57,7 @@ export async function POST(req: Request) {
         )
       }
 
+      if (!isWithinSizeLimit(file.size, Number(process.env.MAX_FILE_SIZE_MB || 10))) return NextResponse.json({ error: "File is too large" }, { status: 413 })
       const fileType = getFileType(file.name)
       if (!isSupportedFileType(fileType)) {
         return NextResponse.json(
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       const fileBuffer = Buffer.from(arrayBuffer)
       const filePath = await saveFile(user.orgId, file.name, fileBuffer)
 
-      const extraction = await extractText(filePath, fileType)
+      const extraction = await extractText(filePath, fileType).finally(() => deleteFile(filePath))
 
       if (extraction.error) {
         return NextResponse.json(
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
       // Fix 11: Clean up temporary scan file (not persisted in DB)
       try {
-        deleteFile(filePath)
+        await deleteFile(filePath)
       } catch {
         // Ignore cleanup errors
       }
@@ -109,6 +109,8 @@ export async function POST(req: Request) {
       )
     }
 
+    if (documentText.length > 240000) return NextResponse.json({ error: "Split documents above 240,000 extracted characters before scanning." }, { status: 413 })
+
     // Call LLM to scan document
     const result = await scanChecklistDocument(documentText)
 
@@ -122,7 +124,10 @@ export async function POST(req: Request) {
         itemsFound: result.items.length,
       },
     })
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof PayloadTooLarge) return NextResponse.json({ error: error.message }, { status: 413 })
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Scan checklist error:", error)
 
     if (error.message?.includes("LLM providers failed")) {

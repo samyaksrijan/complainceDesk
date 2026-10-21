@@ -3,10 +3,10 @@
 // Types matching the backend
 export interface ChecklistItemData {
   id: string // client-side temp ID for React keys
-  name: string
+  fieldName: string
   fieldType: "NUMBER" | "BOOLEAN" | "TEXT" | "SELECT"
   condition: string
-  thresholdValue: any
+  thresholdValue: string | number | boolean | number[]
   unit: string
   options: string[]
   description: string
@@ -44,13 +44,13 @@ export const DEFAULT_CONDITIONS: Record<string, string> = {
 }
 
 // Default threshold values per type+condition
-export function getDefaultThreshold(fieldType: string, condition: string): any {
-  if (fieldType === "BOOLEAN") return null
+export function getDefaultThreshold(fieldType: string, condition: string): ChecklistItemData["thresholdValue"] {
+  if (fieldType === "BOOLEAN") return true
   if (fieldType === "NUMBER" && condition === "RANGE") return [0, 100]
   if (fieldType === "NUMBER") return 0
   if (fieldType === "TEXT") return ""
   if (fieldType === "SELECT") return ""
-  return null
+  return ""
 }
 
 let tempIdCounter = 0
@@ -59,7 +59,7 @@ export function createItem(sortOrder: number): ChecklistItemData {
   tempIdCounter++
   return {
     id: `temp_${tempIdCounter}_${Date.now()}`,
-    name: "",
+    fieldName: "",
     fieldType: "NUMBER",
     condition: "LESS_THAN",
     thresholdValue: 0,

@@ -1,11 +1,12 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { SessionUser } from "@/lib/rbac"
-import { deleteFile } from "@/services/storage"
 import { logActivity } from "@/services/activity"
+import { formatThreshold } from "@/services/compliance"
+import { deleteFile } from "@/services/storage"
+import { NextResponse } from "next/server"
 
 // GET /api/documents/[id] — Get document detail
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const { getServerSession } = await import("next-auth")
@@ -35,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           include: {
             items: {
               include: {
-                checklistItem: { select: { fieldName: true } },
+                checklistItem: true,
               },
             },
           },
@@ -52,8 +53,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       )
     }
 
-    return NextResponse.json(document)
+    return NextResponse.json({ ...document, results: document.results.map(result => ({ ...result, items: result.items.map(item => ({ ...item, fieldName: item.checklistItem.fieldName, expected: formatThreshold(item.checklistItem.condition, item.checklistItem.thresholdValue, item.checklistItem.unit) })) })) })
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Get document error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -63,7 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 // DELETE /api/documents/[id] — Delete document
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const { getServerSession } = await import("next-auth")
@@ -101,8 +103,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       )
     }
 
+    if (document.status === "PROCESSING") return NextResponse.json({ error: "Wait for evaluation to complete before deletion." }, { status: 409 })
+
     // Delete file from disk
-    deleteFile(document.fileUrl)
+    await deleteFile(document.fileUrl)
 
     // Delete from database (cascade: results, result items)
     await prisma.document.delete({
@@ -110,7 +114,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     })
 
     // Fix 23: Use logActivity service
-    logActivity({
+    await logActivity({
       orgId: user.orgId,
       userId: user.id,
       action: "document.deleted",
@@ -121,6 +125,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Delete document error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

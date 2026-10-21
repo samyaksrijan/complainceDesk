@@ -11,6 +11,7 @@ declare module "next-auth" {
   }
 
   interface User {
+    authenticatedAt?: number
     id: string
     email: string
     name: string
@@ -26,6 +27,7 @@ declare module "next-auth/jwt" {
     role: string
     orgId: string
     orgName: string
-    lastRoleCheck?: number
+    authenticatedAt?: number
+    invalid?: boolean
   }
 }

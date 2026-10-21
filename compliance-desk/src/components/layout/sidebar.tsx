@@ -1,23 +1,22 @@
 "use client";
 
+import { useAuth } from "@/components/providers/auth-provider";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+    BarChart3,
+    Bell,
+    FileText,
+    LayoutDashboard,
+    LogOut,
+    ScrollText,
+    Settings,
+    ShieldCheck,
+    Users
+} from "lucide-react";
+import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/components/providers/auth-provider";
-import { signOut } from "next-auth/react";
-import { 
-  LayoutDashboard, 
-  FileText, 
-  ShieldCheck, 
-  BarChart3, 
-  Users, 
-  Settings, 
-  LogOut,
-  ScrollText,
-  Bell,
-  ChevronRight
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -95,20 +94,20 @@ export function Sidebar() {
       {/* Brand Header */}
       <div className="p-5 border-b border-slate-100">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shadow-sm">
+          <div className="h-9 w-9 rounded-xl bg-brand-100 ring-1 ring-brand-200 flex items-center justify-center shadow-sm">
             <ShieldCheck className="h-5 w-5 text-slate-950 stroke-[2.5]" />
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-900 tracking-tight font-display">
               Compliance Desk
             </h2>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-amber-600">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-brand-600">
               Enterprise Governance
             </p>
           </div>
         </Link>
       </div>
-      
+
       {/* Navigation Links */}
       <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -120,20 +119,20 @@ export function Sidebar() {
             href={route.href}
             className={cn(
               "flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold transition-all group",
-              route.active 
-                ? "bg-slate-100 text-slate-900 border border-slate-200 shadow-sm" 
+              route.active
+                ? "bg-brand-50 text-brand-900 border border-brand-200 shadow-none"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             )}
           >
             <div className="flex items-center gap-3">
               <route.icon className={cn(
-                "h-4 w-4 transition-colors", 
-                route.active ? "text-amber-600" : "text-slate-400 group-hover:text-slate-700"
+                "h-4 w-4 transition-colors",
+                route.active ? "text-brand-600" : "text-slate-400 group-hover:text-slate-700"
               )} />
               <span>{route.label}</span>
             </div>
             {route.tag && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
                 {route.tag}
               </span>
             )}
@@ -151,17 +150,17 @@ export function Sidebar() {
             </div>
             <span className={cn(
               "text-[9px] uppercase font-bold px-2 py-0.5 rounded-full border",
-              isAdmin ? "bg-amber-50 text-amber-700 border-amber-200" : 
-              isAuditor ? "bg-sky-50 text-sky-700 border-sky-200" : 
+              isAdmin ? "bg-brand-50 text-brand-700 border-brand-200" :
+              isAuditor ? "bg-sky-50 text-sky-700 border-sky-200" :
               "bg-slate-100 text-slate-600 border-slate-200"
             )}>
               {isAdmin ? "Admin" : isAuditor ? "Auditor" : "Viewer"}
             </span>
           </div>
         </div>
-        
-        <Button 
-          variant="ghost" 
+
+        <Button
+          variant="ghost"
           size="sm"
           className="w-full justify-start text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 h-8 rounded-lg"
           onClick={() => signOut({ callbackUrl: "/login" })}

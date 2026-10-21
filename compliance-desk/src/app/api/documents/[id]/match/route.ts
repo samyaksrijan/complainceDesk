@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { SessionUser } from "@/lib/rbac"
-import { matchDocumentToChecklist } from "@/services/matching"
 import { logActivity } from "@/services/activity"
+import { matchDocumentToChecklist } from "@/services/matching"
+import { NextResponse } from "next/server"
 
 // POST /api/documents/[id]/match
 // Match a document to a checklist (auto or manual)
@@ -44,6 +44,8 @@ export async function POST(
       )
     }
 
+    if (document.status === "PROCESSING") return NextResponse.json({ error: "Wait for the current operation to complete." }, { status: 409 })
+
     if (!document.extractedText) {
       return NextResponse.json(
         { error: "Document has no extracted text", code: "VALIDATION_ERROR" },
@@ -64,7 +66,7 @@ export async function POST(
           id: manualChecklistId,
           OR: [
             { orgId: user.orgId },
-            { isTemplate: true },
+            { isSystemTemplate: true },
           ],
         },
       })
@@ -94,16 +96,18 @@ export async function POST(
 
     if (matchResult.matched && matchResult.checklistId) {
       // Update document
-      await prisma.document.update({
-        where: { id },
+      const updated = await prisma.document.updateMany({
+        where: { id, orgId: user.orgId, status: { not: "PROCESSING" } },
         data: {
           matchedChecklistId: matchResult.checklistId,
           status: "MATCHED",
         },
       })
 
+      if (updated.count !== 1) return NextResponse.json({ error: "The document is being evaluated. Refresh and try again." }, { status: 409 })
+
       // Fix 23: Use logActivity service
-      logActivity({
+      await logActivity({
         orgId: user.orgId,
         userId: user.id,
         action: "document.matched",
@@ -119,7 +123,9 @@ export async function POST(
     }
 
     return NextResponse.json(matchResult)
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Match error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

@@ -1,12 +1,12 @@
 "use client"
 
-import { getSession } from "next-auth/react"
+import { getSession } from "next-auth/react";
 
 interface FetchOptions extends RequestInit {
   parseJson?: boolean
 }
 
-export async function apiFetch<T = any>(
+export async function apiFetch<T = unknown>(
   url: string,
   options: FetchOptions = {}
 ): Promise<{ data: T | null; error: string | null; status: number }> {
@@ -44,7 +44,7 @@ export async function apiFetch<T = any>(
       return { data: null, error: errorMessage, status: res.status }
     }
 
-    if (!parseJson) {
+    if (!parseJson || res.status === 204) {
       return { data: null, error: null, status: res.status }
     }
 
@@ -61,20 +61,20 @@ export async function apiFetch<T = any>(
 
 // Convenience methods
 export const api = {
-  get: <T = any>(url: string) => apiFetch<T>(url, { method: "GET" }),
+  get: <T = unknown>(url: string) => apiFetch<T>(url, { method: "GET" }),
 
-  post: <T = any>(url: string, body?: any) =>
+  post: <T = unknown>(url: string, body?: unknown) =>
     apiFetch<T>(url, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
-  put: <T = any>(url: string, body?: any) =>
+  put: <T = unknown>(url: string, body?: unknown) =>
     apiFetch<T>(url, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
 
-  delete: <T = any>(url: string) =>
+  delete: <T = unknown>(url: string) =>
     apiFetch<T>(url, { method: "DELETE" }),
 }

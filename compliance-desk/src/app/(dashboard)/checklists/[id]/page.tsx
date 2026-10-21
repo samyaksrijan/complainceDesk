@@ -1,24 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
-import { usePageTitle } from "@/lib/use-page-title"
 import { useAuth } from "@/components/providers/auth-provider"
-import { api } from "@/lib/api"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { toast } from "sonner"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { api } from "@/lib/api"
+import { usePageTitle } from "@/lib/use-page-title"
 import {
-  ArrowLeft,
-  Edit,
-  Copy,
-  Trash2,
-  Calendar,
-  User,
-  Hash,
+    ArrowLeft,
+    Calendar,
+    Copy,
+    Edit,
+    Hash,
+    Trash2,
+    User,
 } from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 
-interface ChecklistDetail {
+export interface ChecklistDetail {
+  orgId: string
   id: string
   name: string
   description: string | null
@@ -28,11 +29,12 @@ interface ChecklistDetail {
   createdBy: { name: string } | null
   items: {
     id: string
-    name: string
-    description: string | null
-    fieldType: string
+    fieldName: string
+    description: string
+    sourceText?: string | null | null
+    fieldType: import("@prisma/client").FieldType
     condition: string
-    thresholdValue: any
+    thresholdValue: string | number | boolean | number[]
     unit: string | null
     options: string[] | null
     isRequired: boolean
@@ -73,7 +75,7 @@ function formatExpected(item: ChecklistDetail["items"][0]): string {
 export default function ChecklistDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const { canEdit, isAdmin } = useAuth()
+  const { canEdit, isAdmin, user } = useAuth()
   const id = params.id as string
 
   const [checklist, setChecklist] = useState<ChecklistDetail | null>(null)
@@ -86,7 +88,7 @@ export default function ChecklistDetailPage() {
   useEffect(() => {
     const fetchChecklist = async () => {
       setIsLoading(true)
-      const { data, error } = await api.get(`/api/checklists/${id}`)
+      const { data, error } = await api.get<ChecklistDetail>(`/api/checklists/${id}`)
       if (error) {
         toast.error("Failed to load checklist")
         router.push("/checklists")
@@ -102,7 +104,7 @@ export default function ChecklistDetailPage() {
     setIsDeleting(true)
     const { error } = await api.delete(`/api/checklists/${id}`)
     if (error) {
-      toast.error(error)
+      toast.error(error || "Request failed")
     } else {
       toast.success("Checklist deleted")
       router.push("/checklists")
@@ -112,9 +114,9 @@ export default function ChecklistDetailPage() {
 
   const handleClone = async () => {
     setIsCloning(true)
-    const { data, error } = await api.post(`/api/checklists/${id}/clone`)
-    if (error) {
-      toast.error(error)
+    const { data, error } = await api.post<{ id: string }>(`/api/checklists/${id}/clone`)
+    if (error || !data) {
+      toast.error(error || "Request failed")
     } else {
       toast.success("Checklist cloned")
       router.push(`/checklists/${data.id}`)
@@ -198,7 +200,7 @@ export default function ChecklistDetailPage() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {canEdit && (
+            {canEdit && checklist.orgId === user?.orgId && (
               <button
                 onClick={() => router.push(`/checklists/${id}/edit`)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -221,7 +223,7 @@ export default function ChecklistDetailPage() {
             )}
             <button
               onClick={handleClone}
-              disabled={isCloning}
+              disabled={!canEdit || isCloning}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               style={{
                 border: "1px solid var(--border)",
@@ -231,7 +233,7 @@ export default function ChecklistDetailPage() {
               <Copy className="h-4 w-4" />
               {isCloning ? "Cloning..." : "Clone"}
             </button>
-            {isAdmin && (
+            {isAdmin && checklist.orgId === user?.orgId && (
               <button
                 onClick={() => setShowDelete(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -301,7 +303,7 @@ export default function ChecklistDetailPage() {
               <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {index + 1}
               </span>
-              <span className="font-medium">{item.name}</span>
+              <span className="font-medium">{item.fieldName}</span>
               <span>
                 <StatusBadge status={item.fieldType} />
               </span>
@@ -312,14 +314,14 @@ export default function ChecklistDetailPage() {
                 {formatExpected(item)}
               </span>
               <span className="text-xs">
-                {item.isRequired ? (
+                {true ? (
                   <span style={{ color: "var(--success)" }}>Yes</span>
                 ) : (
                   <span style={{ color: "var(--text-muted)" }}>No</span>
                 )}
               </span>
               <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-                {item.description || "-"}
+                {item.sourceText || "-"}
               </span>
             </div>
           ))}

@@ -53,7 +53,6 @@ function scoreChecklist(
     items: Array<{ fieldName: string }>
   }
 ): number {
-  const docKeywordSet = new Set(docKeywords)
 
   // Build checklist keywords from all available text
   const checklistTexts = [
@@ -103,7 +102,7 @@ export async function matchDocumentToChecklist(
     where: {
       OR: [
         { orgId },
-        { isTemplate: true },
+        { isSystemTemplate: true },
       ],
     },
     include: {

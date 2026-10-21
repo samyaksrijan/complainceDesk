@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { NotificationType } from "@prisma/client"
 
 interface LogActivityParams {
   orgId: string
@@ -6,7 +7,7 @@ interface LogActivityParams {
   action: string
   resourceType: string
   resourceId?: string
-  metadata?: Record<string, any>
+  metadata?: import("@prisma/client").Prisma.InputJsonObject
 }
 
 /**
@@ -22,9 +23,23 @@ export async function logActivity(params: LogActivityParams): Promise<void> {
         action: params.action,
         resourceType: params.resourceType,
         resourceId: params.resourceId || null,
-        metadata: params.metadata || null,
+        metadata: params.metadata || undefined,
       },
     })
+    const events: Record<string, { type: NotificationType; title: string }> = {
+      "document.uploaded": { type: "DOCUMENT_UPLOADED", title: "Document uploaded" },
+      "document.checked": { type: "ANALYSIS_COMPLETE", title: "Compliance evaluation complete" },
+      "document.deleted": { type: "DOCUMENT_DELETED", title: "Document deleted" },
+      "checklist.created": { type: "CHECKLIST_CREATED", title: "Checklist created" },
+      "checklist.updated": { type: "CHECKLIST_UPDATED", title: "Checklist updated" },
+      "user.invited": { type: "USER_INVITED", title: "Member invited" },
+      "user_role_changed": { type: "ROLE_CHANGED", title: "Member role updated" },
+    }
+    const event = events[params.action]
+    if (event) {
+      const recipients = await prisma.user.findMany({ where: { orgId: params.orgId, status: "ACTIVE", ...(event.type === "ANALYSIS_COMPLETE" ? { analysisCompleteNotifications: true } : {}) }, select: { id: true } })
+      await prisma.notification.createMany({ data: recipients.map(recipient => ({ userId: recipient.id, orgId: params.orgId, type: event.type, title: event.title, message: `${event.title}${params.metadata?.name ? ': ' + String(params.metadata.name) : ''}`, actorId: params.userId, targetType: params.resourceType.toUpperCase(), targetId: params.resourceId })) })
+    }
   } catch (error) {
     console.error("[ActivityLog] Failed to log activity:", error)
     // Do not throw — activity logging is non-critical
@@ -39,7 +54,7 @@ export async function getRecentActivity(
   orgId: string,
   limit: number = 20,
   skip: number = 0
-): Promise<any[]> {
+) {
   const logs = await prisma.activityLog.findMany({
     where: { orgId },
     include: {

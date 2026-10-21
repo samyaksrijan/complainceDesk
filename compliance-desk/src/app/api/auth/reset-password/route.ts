@@ -1,71 +1,32 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import bcrypt from "bcryptjs"
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
+import { registerSchema } from "@/lib/validation"
+import { emailConfigured } from "@/services/email"
+import { consumePasswordLink, issuePasswordLink } from "@/services/password-reset"
+import { NextResponse } from "next/server"
 import { z } from "zod"
-import crypto from "crypto"
-import { checkRateLimit, RATE_LIMITS, getClientIp } from "@/lib/rate-limit"
 
-const resetRequestSchema = z.object({
-  email: z.string().email(),
-})
-
+const schema = z.union([
+  z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), newPassword: registerSchema.shape.password }),
+  z.object({ email: z.string().email().transform(value => value.toLowerCase().trim()) }),
+])
 export async function POST(request: Request) {
   try {
-    // Rate limit password resets
-    const ip = getClientIp(request)
-    const rateLimit = checkRateLimit(`reset:${ip}`, RATE_LIMITS.REGISTER)
-
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
-        { status: 429 }
-      )
+    const limit = await checkRateLimit(`reset:${getClientIp(request)}`, RATE_LIMITS.REGISTER)
+    if (!limit.allowed) return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429, headers: { "Retry-After": String(limit.retryAfter) } })
+    const parsed = schema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Provide a valid email or reset token and a password with at least 8 characters, a letter and a number." }, { status: 400 })
+    if ("token" in parsed.data) {
+      const valid = await consumePasswordLink(parsed.data.token, parsed.data.newPassword)
+      return NextResponse.json(valid ? { message: "Password updated. Please sign in again." } : { error: "This link has expired or has already been used." }, { status: valid ? 200 : 400 })
     }
-
-    const body = await request.json()
-    const parsed = resetRequestSchema.safeParse(body)
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Valid email is required", code: "VALIDATION_ERROR" },
-        { status: 400 }
-      )
-    }
-
-    // Always return the same message (don't reveal if email exists)
-    const GENERIC_MESSAGE = {
-      message: "If an account with that email exists, you will receive a password reset link.",
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: parsed.data.email.toLowerCase().trim() },
-    })
-
-    if (!user) {
-      return NextResponse.json(GENERIC_MESSAGE)
-    }
-
-    // Generate a temporary password (in production, use a token flow)
-    const tempPassword = crypto.randomBytes(8).toString("hex")
-    const hash = await bcrypt.hash(tempPassword, 12)
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash: hash },
-    })
-
-    // TODO: Send email with tempPassword or reset link
-    // For now, log it (development only)
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[DEV] Password reset for ${user.email}: ${tempPassword}`)
-    }
-
-    return NextResponse.json(GENERIC_MESSAGE)
+    if (!emailConfigured()) return NextResponse.json({ error: "Password recovery is temporarily unavailable. Contact your administrator." }, { status: 503 })
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+    if (user?.status === "ACTIVE") await issuePasswordLink(user)
+    return NextResponse.json({ message: "If an account with that email exists, you will receive a password reset link." })
   } catch (error) {
-    console.error("Reset password error:", error)
-    return NextResponse.json(
-      { error: "Internal server error", code: "INTERNAL_ERROR" },
-      { status: 500 }
-    )
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
+    console.error("Password recovery failed:", error)
+    return NextResponse.json({ error: "Unable to process password recovery. Please try again later." }, { status: 503 })
   }
 }

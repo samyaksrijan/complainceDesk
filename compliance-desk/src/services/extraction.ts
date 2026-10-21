@@ -1,5 +1,5 @@
-import fs from "fs"
-import path from "path"
+import { readFile } from "@/services/storage"
+import path from "node:path"
 
 interface ExtractionResult {
   text: string
@@ -37,7 +37,8 @@ export async function extractText(
           error: `Unsupported file type: ${ext}`,
         }
     }
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
     return {
       text: "",
       method: ext,
@@ -47,20 +48,23 @@ export async function extractText(
 }
 
 async function extractFromPDF(filePath: string): Promise<ExtractionResult> {
-  const pdfParse = (await import("pdf-parse")).default
-  const buffer = fs.readFileSync(filePath)
-  const data = await pdfParse(buffer)
+  const { PDFParse } = await import("pdf-parse")
+  const { getPath } = await import("pdf-parse/worker")
+  PDFParse.setWorker(getPath())
+  const parser = new PDFParse({ data: new Uint8Array(await readFile(filePath)) })
+  let data
+  try { data = await parser.getText() } finally { await parser.destroy() }
 
   return {
     text: data.text,
-    pageCount: data.numpages,
+    pageCount: data.total,
     method: "pdf-parse",
   }
 }
 
 async function extractFromDOCX(filePath: string): Promise<ExtractionResult> {
   const mammoth = await import("mammoth")
-  const buffer = fs.readFileSync(filePath)
+  const buffer = await readFile(filePath)
   const result = await mammoth.extractRawText({ buffer })
 
   return {
@@ -71,7 +75,9 @@ async function extractFromDOCX(filePath: string): Promise<ExtractionResult> {
 
 async function extractFromImage(filePath: string): Promise<ExtractionResult> {
   const Tesseract = await import("tesseract.js")
-  const result = await Tesseract.recognize(filePath, "eng", {
+  const result = await Tesseract.recognize(await readFile(filePath), "eng", {
+    langPath: process.env.TESSERACT_LANG_PATH || undefined,
+    cacheMethod: "none",
     logger: () => {}, // silence progress logs
   })
 
@@ -82,7 +88,7 @@ async function extractFromImage(filePath: string): Promise<ExtractionResult> {
 }
 
 async function extractFromText(filePath: string): Promise<ExtractionResult> {
-  const text = fs.readFileSync(filePath, "utf-8")
+  const text = (await readFile(filePath)).toString("utf-8")
 
   return {
     text,

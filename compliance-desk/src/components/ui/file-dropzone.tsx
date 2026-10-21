@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
-import { Upload, File, X, AlertCircle } from "lucide-react"
+import { AlertCircle, Upload, X } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
 
 interface FileDropzoneProps {
   onFileSelect: (file: File) => void
@@ -10,14 +10,6 @@ interface FileDropzoneProps {
   accept?: string
   maxSizeMB?: number
   disabled?: boolean
-}
-
-const ACCEPTED_TYPES: Record<string, string[]> = {
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-  "image/png": [".png"],
-  "image/jpeg": [".jpg", ".jpeg"],
-  "text/plain": [".txt"],
 }
 
 const ACCEPTED_EXTENSIONS = [".pdf", ".docx", ".png", ".jpg", ".jpeg", ".txt"]

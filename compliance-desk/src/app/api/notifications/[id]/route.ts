@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { prisma } from "@/lib/prisma";
+import { SessionUser, withAuth } from "@/lib/rbac";
+import { NextResponse } from "next/server";
 
 // DELETE /api/notifications/[id]
 export const DELETE = withAuth(
@@ -23,6 +23,7 @@ export const DELETE = withAuth(
 
       return new NextResponse(null, { status: 204 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Delete notification error:", error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }

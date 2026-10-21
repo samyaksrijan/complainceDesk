@@ -1,0 +1,5 @@
+Facility Safety Inspection — sample fixture
+The building height is 42 meters. Floor load capacity is 5.2 kN/m².
+Automatic sprinklers are installed and operational throughout the facility.
+Emergency exits are present. The emergency lighting backup lasts 180 minutes.
+The backup generator switches on in 8 seconds.

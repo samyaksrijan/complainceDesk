@@ -1,7 +1,7 @@
 "use client"
 
+import { AlertTriangle, ChevronDown, RefreshCw } from "lucide-react"
 import React from "react"
-import { AlertTriangle, RefreshCw, ChevronDown } from "lucide-react"
 
 interface ErrorBoundaryState {
   hasError: boolean

@@ -1,10 +1,10 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, ReactNode, useContext } from "react";
 
 interface AuthContextType {
-  user: any;
+  user: import("next-auth").Session["user"] | undefined;
   isLoading: boolean;
   isAdmin: boolean;
   isAuditor: boolean;

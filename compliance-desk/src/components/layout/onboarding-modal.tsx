@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { ArrowRight, BarChart2, CheckSquare, Upload, X } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { FileText, CheckSquare, BarChart2, Upload, X, ArrowRight } from "lucide-react"
+import { useEffect, useState } from "react"
 
 const ONBOARDING_KEY = "compliance_desk_onboarded"
 
@@ -36,7 +36,7 @@ const STEPS = [
   },
 ]
 
-export function OnboardingModal() {
+export function OnboardingModal({ open, onClose }: { open?: boolean; onClose?: () => void } = {}) {
   const router = useRouter()
   const [visible, setVisible] = useState(false)
   const [step, setStep] = useState(0)
@@ -44,7 +44,7 @@ export function OnboardingModal() {
   useEffect(() => {
     try {
       const done = localStorage.getItem(ONBOARDING_KEY)
-      if (!done) setVisible(true)
+      if (!done) { const timer = setTimeout(() => setVisible(true), 0); return () => clearTimeout(timer) }
     } catch {}
   }, [])
 
@@ -53,6 +53,7 @@ export function OnboardingModal() {
       localStorage.setItem(ONBOARDING_KEY, "1")
     } catch {}
     setVisible(false)
+    onClose?.()
   }
 
   const handleAction = () => {
@@ -60,7 +61,7 @@ export function OnboardingModal() {
     dismiss()
   }
 
-  if (!visible) return null
+  if (!(open ?? visible)) return null
 
   const current = STEPS[step]
   const Icon = current.icon
@@ -107,7 +108,7 @@ export function OnboardingModal() {
             Welcome to Compliance Desk!
           </h2>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            Here's how to get started in 3 steps.
+            Here&apos;s how to get started in 3 steps.
           </p>
         </div>
 

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAuth } from "@/lib/rbac"
 import { Role } from "@prisma/client"
+import { NextResponse } from "next/server"
 
 export const GET = withAuth(
   async (
@@ -39,11 +39,12 @@ export const GET = withAuth(
         createdAt: report.createdAt.toISOString(),
         completedAt: report.completedAt?.toISOString() || null,
         // Content contains summary, sectionBreakdown, documentResults
-        ...(report.content as any || {}),
+        ...(report.content && typeof report.content === "object" && !Array.isArray(report.content) ? report.content : {}),
       }
 
       return NextResponse.json(detail)
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Get report detail error:", error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
@@ -75,6 +76,7 @@ export const DELETE = withAuth(
 
       return new NextResponse(null, { status: 204 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Delete report error:", error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }

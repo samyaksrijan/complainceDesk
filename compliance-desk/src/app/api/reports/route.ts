@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAuth } from "@/lib/rbac"
+import { NextResponse } from "next/server"
 
 export const GET = withAuth(
   async (req: Request, { user }: { user: SessionUser }) => {
@@ -46,6 +46,7 @@ export const GET = withAuth(
         totalPages: Math.ceil(total / limit),
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Get reports error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

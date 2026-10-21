@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { extractDocumentValues, generateSummary, ExtractedValue } from "@/services/llm"
-import { FieldType, Condition, ChecklistItem } from "@prisma/client"
+import { extractDocumentValues, ExtractedValue, generateSummary } from "@/services/llm"
+import { ChecklistItem } from "@prisma/client"
 
 interface EvaluationResult {
   status: "PASS" | "FAIL" | "NOT_FOUND" | "NEEDS_REVIEW"
@@ -32,11 +32,17 @@ interface ComplianceCheckResult {
  * Parse a numeric value from a string.
  * Returns null if not parseable.
  */
-function parseNumber(value: string | null): number | null {
-  if (value === null || value === undefined) return null
-  const cleaned = value.toString().replace(/[^0-9.\-]/g, "")
-  const num = parseFloat(cleaned)
-  return isNaN(num) ? null : num
+export function parseNumber(value: string | null): number | null {
+  if (value == null) return null
+  const match = value.trim().match(/[-+]?\d(?:[\d.,\u00a0 ]*\d)?/)
+  if (!match) return null
+  let numeric = match[0].replace(/[\s\u00a0]/g, "")
+  const comma = numeric.lastIndexOf(","), dot = numeric.lastIndexOf(".")
+  if (comma >= 0 && dot >= 0) numeric = comma > dot ? numeric.replaceAll(".", "").replace(",", ".") : numeric.replaceAll(",", "")
+  else if (comma >= 0) numeric = /^[-+]?\d{1,3}(,\d{3})+$/.test(numeric) ? numeric.replaceAll(",", "") : numeric.replace(",", ".")
+  else if ((numeric.match(/\./g) || []).length > 1) numeric = /^[-+]?\d{1,3}(\.\d{3})+$/.test(numeric) ? numeric.replaceAll(".", "") : "invalid"
+  const result = Number(numeric)
+  return Number.isFinite(result) ? result : null
 }
 
 /**
@@ -53,7 +59,7 @@ function parseBoolean(value: string | null): boolean | null {
 /**
  * Format a threshold value for display.
  */
-function formatThreshold(condition: string, thresholdValue: any, unit?: string | null): string {
+export function formatThreshold(condition: string, thresholdValue: unknown, unit?: string | null): string {
   const unitStr = unit ? ` ${unit}` : ""
   switch (condition) {
     case "LESS_THAN":
@@ -81,7 +87,7 @@ function formatThreshold(condition: string, thresholdValue: any, unit?: string |
 /**
  * Evaluate a single checklist item against an extracted value.
  */
-function evaluateItem(
+export function evaluateItem(
   item: ChecklistItem,
   extraction: ExtractedValue | undefined
 ): EvaluationResult {
@@ -94,6 +100,8 @@ function evaluateItem(
       notes: "Value not found in document",
     }
   }
+
+  if (extraction.needs_review) return { status: "NEEDS_REVIEW", extractedValue: extraction.extracted_value, sourceExcerpt: extraction.source_excerpt, notes: extraction.note || "Conflicting evidence requires review" }
 
   const rawValue = extraction.extracted_value
   const sourceExcerpt = extraction.source_excerpt || null
@@ -168,19 +176,6 @@ function evaluateItem(
       case "BOOLEAN": {
         const boolValue = parseBoolean(rawValue)
         if (boolValue === null) {
-          // Could not determine — check if the raw text suggests presence
-          const lower = rawValue.toLowerCase()
-          const seemsPresent = ["present", "yes", "installed", "available", "confirmed", "operational", "compliant"].some(
-            (word) => lower.includes(word)
-          )
-          if (seemsPresent) {
-            return {
-              status: "PASS",
-              extractedValue: rawValue,
-              sourceExcerpt,
-              notes: null,
-            }
-          }
           return {
             status: "NEEDS_REVIEW",
             extractedValue: rawValue,
@@ -232,28 +227,21 @@ function evaluateItem(
         if (item.condition === "EQUALS") {
           const thresholdStr = (item.thresholdValue as string).toLowerCase()
           const lowerValue = rawValue.toLowerCase()
-          const pass = lowerValue === thresholdStr || lowerValue.includes(thresholdStr)
-
-          // Also check against options array if present
-          let passViaOptions = false
-          if (item.options && Array.isArray(item.options)) {
-            passViaOptions = (item.options as string[]).some(
-              (opt) => lowerValue.includes(opt.toLowerCase())
-            )
-          }
+          const pass = lowerValue.trim() === thresholdStr.trim()
 
           return {
-            status: (pass || passViaOptions) ? "PASS" : "FAIL",
+            status: pass ? "PASS" : "FAIL",
             extractedValue: rawValue,
             sourceExcerpt,
-            notes: (pass || passViaOptions) ? null : `Value "${rawValue}" does not match expected "${item.thresholdValue}"`,
+            notes: pass ? null : `Value "${rawValue}" does not match expected "${item.thresholdValue}"`,
           }
         }
 
         break
       }
     }
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
     return {
       status: "NEEDS_REVIEW",
       extractedValue: rawValue,
@@ -280,7 +268,8 @@ function evaluateItem(
  */
 export async function runComplianceCheck(
   documentId: string,
-  checklistId: string
+  checklistId: string,
+  lease?: Date
 ): Promise<ComplianceCheckResult> {
   // Fetch document
   const document = await prisma.document.findUnique({
@@ -321,7 +310,11 @@ export async function runComplianceCheck(
       (e) => e.field_name.toLowerCase() === item.fieldName.toLowerCase()
     )
 
-    const evaluation = evaluateItem(item, extraction)
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim()
+    const cited = extraction?.source_excerpt && normalize(document.extractedText!).includes(normalize(extraction.source_excerpt))
+    const evaluation = extraction?.found && !cited
+      ? { status: "NEEDS_REVIEW" as const, extractedValue: extraction.extracted_value, sourceExcerpt: extraction.source_excerpt, notes: "The extracted value has no verifiable source citation in the document." }
+      : evaluateItem(item, extraction)
 
     return {
       checklistItemId: item.id,
@@ -341,8 +334,8 @@ export async function runComplianceCheck(
   const needsReviewItems = evaluations.filter((e) => e.status === "NEEDS_REVIEW").length
   const totalItems = evaluations.length
 
-  // Score = passed / (total - notFound) * 100
-  const evaluatedItems = totalItems - notFoundItems
+  // Missing evidence remains part of the compliance obligation.
+  const evaluatedItems = totalItems
   const overallScore = evaluatedItems > 0
     ? Math.round((passedItems / evaluatedItems) * 10000) / 100
     : 0
@@ -376,7 +369,7 @@ export async function runComplianceCheck(
   // Step 5: Save results and update document status atomically
   const newStatus = overallScore >= 100 ? "COMPLIANT" : "NON_COMPLIANT"
 
-  const result = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const complianceResult = await tx.complianceResult.create({
       data: {
         documentId,
@@ -390,7 +383,7 @@ export async function runComplianceCheck(
         items: {
           create: evaluations.map((evaluation) => ({
             checklistItemId: evaluation.checklistItemId,
-            status: evaluation.status as any,
+            status: evaluation.status,
             extractedValue: evaluation.extractedValue,
             sourceExcerpt: evaluation.sourceExcerpt,
             notes: evaluation.notes,
@@ -402,10 +395,11 @@ export async function runComplianceCheck(
       },
     })
 
-    await tx.document.update({
-      where: { id: documentId },
-      data: { status: newStatus },
+    const updated = await tx.document.updateMany({
+      where: { id: documentId, ...(lease ? { processingStartedAt: lease, status: "PROCESSING" } : {}) },
+      data: { status: newStatus, processingStartedAt: null },
     })
+    if (updated.count !== 1) throw new Error("This evaluation was superseded. Please refresh the document.")
 
     return complianceResult
   })

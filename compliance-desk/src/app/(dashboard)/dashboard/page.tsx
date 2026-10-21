@@ -1,34 +1,26 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/components/providers/auth-provider"
-import { api } from "@/lib/api"
-import { usePageTitle } from "@/lib/use-page-title"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { UploadDocumentModal } from "@/components/document/upload-document-modal"
 import { OnboardingModal } from "@/components/layout/onboarding-modal"
-import { toast } from "sonner"
+import { useAuth } from "@/components/providers/auth-provider"
+import { usePageTitle } from "@/lib/use-page-title"
 import {
-  FileText,
-  ShieldCheck,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  Upload,
-  Plus,
-  ArrowRight,
-  RefreshCw,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Layers,
-  Sparkles,
-  Shield,
-  Activity,
-  ArrowUpRight,
+    Activity,
+    ArrowRight,
+    ArrowUpRight,
+    BarChart3,
+    CheckCircle2,
+    FileText,
+    Layers,
+    Plus,
+    ShieldCheck,
+    TrendingDown,
+    TrendingUp,
+    Upload
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +53,7 @@ interface ActivityItem {
     | "CHECKLIST_CREATED"
     | "DOCUMENT_DELETED"
     | "REANALYSIS_TRIGGERED"
+    | "SYSTEM_EVENT"
   description: string
   userName: string
   userRole: string
@@ -119,7 +112,7 @@ function StatCard({ label, value, icon, loading, trend, valueColor, sub }: StatC
         <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
           {label}
         </span>
-        <div className="h-8 w-8 rounded-xl flex items-center justify-center bg-amber-50 text-amber-700 border border-amber-200/80 group-hover:scale-105 transition-transform">
+        <div className="h-8 w-8 rounded-xl flex items-center justify-center bg-brand-50 text-brand-700 border border-brand-200/80 group-hover:scale-105 transition-transform">
           {icon}
         </div>
       </div>
@@ -186,7 +179,7 @@ function ComplianceDistributionChart({
           <h3 className="text-sm font-bold text-slate-900 tracking-tight font-display">
             Audit Conformance Distribution
           </h3>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-800 px-2 py-0.5 rounded-full bg-brand-50 border border-brand-200">
             Adherence Brackets
           </span>
         </div>
@@ -271,7 +264,7 @@ function StatusBreakdown({
 
   const total = items.reduce((s, i) => s + i.count, 0)
 
-  let conicParts: string[] = []
+  const conicParts: string[] = []
   let acc = 0
   items.forEach((item) => {
     const pct = total > 0 ? (item.count / total) * 100 : 0
@@ -363,7 +356,7 @@ function StatusBreakdown({
 
 export default function DashboardPage() {
   usePageTitle("Executive Overview")
-  const { user, isAdmin, isAuditor } = useAuth()
+  const { isAdmin, isAuditor } = useAuth()
   const router = useRouter()
 
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -383,56 +376,20 @@ export default function DashboardPage() {
         setDistribution(data.distribution || [])
         setActivity(data.activity || [])
       } else {
-        // Fallback demo state
-        setStats({
-          totalDocuments: 12,
-          totalChecklists: 4,
-          averageComplianceScore: 94.2,
-          documentsByStatus: {
-            compliant: 9,
-            nonCompliant: 2,
-            pending: 1,
-            processing: 0,
-            error: 0,
-          },
-          documentsThisMonth: 8,
-          documentsLastMonth: 5,
-          checklistCompletionRate: 91.5,
-        })
-        setDistribution([
-          { range: "76-100", count: 9 },
-          { range: "51-75", count: 2 },
-          { range: "26-50", count: 1 },
-          { range: "0-25", count: 0 },
-        ])
-        setActivity([
-          {
-            id: "act-1",
-            type: "ANALYSIS_COMPLETED",
-            description: "Evaluated 'Skyline Tower Q3 Audit' against Fire Safety Standard",
-            userName: user?.name || "Dr. Eleanor Vance",
-            userRole: user?.role || "AUDITOR",
-            timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-          },
-          {
-            id: "act-2",
-            type: "DOCUMENT_UPLOADED",
-            description: "Ingested 'ISO 27001 ISMS Policy v3.1' for rule mapping",
-            userName: "System Administrator",
-            userRole: "ADMIN",
-            timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-          },
-        ])
+        setStats(null)
+        setDistribution([])
+        setActivity([])
+        toast.error("Unable to load dashboard metrics. Please try again.")
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err)
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [])
 
   useEffect(() => {
-    fetchDashboardData()
+    void Promise.resolve().then(fetchDashboardData)
   }, [fetchDashboardData])
 
   return (
@@ -441,11 +398,11 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
               Workspace Overview
             </span>
             <span className="text-xs text-slate-300">•</span>
-            <span className="text-xs text-slate-500 font-medium">All Standards Active</span>
+            <span className="text-xs text-slate-500 font-medium">Live workspace</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-display">
             Governance & Adherence Command Center
@@ -462,14 +419,14 @@ export default function DashboardPage() {
                 onClick={() => router.push("/checklists/new")}
                 className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 transition-all flex items-center gap-1.5"
               >
-                <Plus className="h-3.5 w-3.5 text-amber-600" />
+                <Plus className="h-3.5 w-3.5 text-brand-600" />
                 New Standard
               </button>
               <button
                 onClick={() => setUploadModalOpen(true)}
                 className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <Upload className="h-3.5 w-3.5 text-amber-400" />
+                <Upload className="h-3.5 w-3.5 text-brand-400" />
                 Ingest Audit Document
               </button>
             </>
@@ -531,10 +488,10 @@ export default function DashboardPage() {
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
+                <div className="p-1.5 rounded-lg bg-brand-50 text-brand-700 border border-brand-200/60">
                   <Upload className="h-4 w-4" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
                   Upload Audit Evidence
                 </h4>
               </div>
@@ -542,7 +499,7 @@ export default function DashboardPage() {
                 Ingest PDF, DOCX, or scan logs to evaluate against active checklists.
               </p>
             </div>
-            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
+            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
           </div>
 
           <div
@@ -551,10 +508,10 @@ export default function DashboardPage() {
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
+                <div className="p-1.5 rounded-lg bg-brand-50 text-brand-700 border border-brand-200/60">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
                   Define Regulatory Standard
                 </h4>
               </div>
@@ -562,7 +519,7 @@ export default function DashboardPage() {
                 Scan regulation files or configure structured threshold checkpoints.
               </p>
             </div>
-            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
+            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
           </div>
 
           <div
@@ -571,18 +528,18 @@ export default function DashboardPage() {
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60">
+                <div className="p-1.5 rounded-lg bg-brand-50 text-brand-700 border border-brand-200/60">
                   <BarChart3 className="h-4 w-4" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
                   Generate Executive Audit Report
                 </h4>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Synthesize document evaluations into exportable PDF certificates.
+                Synthesize document evaluations into exportable PDF reports.
               </p>
             </div>
-            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
+            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
           </div>
         </div>
 
@@ -599,7 +556,7 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => router.push("/audit-log")}
-              className="text-xs text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1"
+              className="text-xs text-brand-700 hover:text-brand-800 font-bold flex items-center gap-1"
             >
               Full Trail <ArrowRight className="h-3 w-3" />
             </button>
@@ -623,7 +580,7 @@ export default function DashboardPage() {
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50/70 border border-slate-200/80 hover:bg-slate-100/60 transition-colors"
                 >
                   <div className="flex items-center gap-3 truncate">
-                    <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 flex-shrink-0">
+                    <div className="h-7 w-7 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 flex-shrink-0">
                       <Activity className="h-3.5 w-3.5" />
                     </div>
                     <div className="truncate">
@@ -656,7 +613,7 @@ export default function DashboardPage() {
         }}
       />
       <OnboardingModal
-        open={onboardingOpen}
+        open={onboardingOpen || undefined}
         onClose={() => setOnboardingOpen(false)}
       />
     </div>

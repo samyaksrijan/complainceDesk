@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { api } from "@/lib/api"
+import { PaginationControls } from "@/components/ui/pagination-controls"
+
 import { useAuth } from "@/components/providers/auth-provider"
-import { usePageTitle } from "@/lib/use-page-title"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, Plus, Trash2, Eye, Download, AlertCircle, RefreshCw, BarChart3, ShieldCheck, Printer, ArrowRight } from "lucide-react"
+import { api } from "@/lib/api"
+import { usePageTitle } from "@/lib/use-page-title"
+import { ArrowRight, BarChart3, Eye, FileText, Plus } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { formatRelativeTime } from "@/components/notifications/notification-bell"
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ interface ReportSummary {
 function ScoreBadge({ score }: { score: number }) {
   if (score === 0) return <span className="text-xs text-slate-400 font-mono">—</span>
   let color = "text-rose-700 bg-rose-50 border-rose-200"
-  if (score >= 70) color = "text-amber-700 bg-amber-50 border-amber-200"
+  if (score >= 70) color = "text-brand-700 bg-brand-50 border-brand-200"
   if (score >= 90) color = "text-emerald-700 bg-emerald-50 border-emerald-200"
 
   return (
@@ -44,7 +45,7 @@ function StatusBadge({ status }: { status: string }) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200">
         <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-        Certified
+        Ready
       </span>
     )
   }
@@ -57,8 +58,8 @@ function StatusBadge({ status }: { status: string }) {
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 border border-amber-200">
-      <div className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 border border-brand-200">
+      <div className="w-1.5 h-1.5 rounded-full bg-brand-600 animate-pulse" />
       Synthesizing
     </span>
   )
@@ -91,39 +92,11 @@ export default function ReportsPage() {
   // Fetch List
   const fetchReports = useCallback(async () => {
     setIsLoadingList(true)
-    const { data } = await api.get<{ items: ReportSummary[], total: number, totalPages: number }>(`/api/reports?page=${page}&limit=20`)
-    if (data && data.items?.length) {
-      setReports(data.items)
-      setTotal(data.total)
-      setTotalPages(data.totalPages)
-    } else {
-      setReports([
-        {
-          id: "rep-1",
-          name: "Q3 Organization-Wide Regulatory Adherence Certificate",
-          status: "READY",
-          generatedBy: { id: "u-1", name: "Dr. Eleanor Vance" },
-          documentCount: 12,
-          averageScore: 94.2,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-          completedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-          checklistName: "High-Rise Commercial Fire & Structural Safety Standard",
-        },
-        {
-          id: "rep-2",
-          name: "ISO 27001 ISMS Conformance Findings Summary",
-          status: "READY",
-          generatedBy: { id: "u-2", name: "Marcus Sterling" },
-          documentCount: 4,
-          averageScore: 88.0,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-          completedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-          checklistName: "ISO/IEC 27001:2022 Information Security Management",
-        },
-      ])
-      setTotal(2)
-      setTotalPages(1)
-    }
+    const { data, error } = await api.get<{ items: ReportSummary[], total: number, totalPages: number }>(`/api/reports?page=${page}&limit=20`)
+    if (error) toast.error(error)
+    setReports(data?.items || [])
+    setTotal(data?.total || 0)
+    setTotalPages(Math.max(1, data?.totalPages || 1))
     setIsLoadingList(false)
   }, [page])
 
@@ -141,7 +114,7 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    fetchReports()
+    void Promise.resolve().then(fetchReports)
   }, [fetchReports])
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -151,9 +124,10 @@ export default function ReportsPage() {
       return
     }
 
+    if (scope === "CHECKLIST" && !selectedChecklistId) { toast.error("Select a checklist first"); return }
     setIsGenerating(true)
     try {
-      const { data, error } = await api.post<{ id: string }>("/api/reports", {
+      const { error } = await api.post<{ reportId: string }>("/api/reports/generate", {
         name,
         scope,
         checklistId: scope === "CHECKLIST" ? selectedChecklistId : undefined,
@@ -168,7 +142,7 @@ export default function ReportsPage() {
         setActiveTab("list")
         fetchReports()
       }
-    } catch (err) {
+    } catch {
       toast.error("An error occurred generating the report")
     } finally {
       setIsGenerating(false)
@@ -181,7 +155,7 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
               Executive Deliverables
             </span>
           </div>
@@ -198,7 +172,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab("generate")}
             className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer font-sans"
           >
-            <Plus className="h-4 w-4 text-amber-400" />
+            <Plus className="h-4 w-4 text-brand-400" />
             Synthesize New Report
           </button>
         </div>
@@ -264,11 +238,11 @@ export default function ReportsPage() {
                       >
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 group-hover:scale-105 transition-transform">
+                            <div className="p-2 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 group-hover:scale-105 transition-transform">
                               <FileText className="h-4 w-4" />
                             </div>
                             <div>
-                              <p className="font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
+                              <p className="font-bold text-slate-900 group-hover:text-brand-800 transition-colors">
                                 {rep.name}
                               </p>
                               <p className="text-[10px] text-slate-400 font-medium">
@@ -294,7 +268,7 @@ export default function ReportsPage() {
                             onClick={() => router.push(`/reports/${rep.id}`)}
                             className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 transition-colors inline-flex items-center gap-1"
                           >
-                            <Eye className="h-3.5 w-3.5 text-amber-600" />
+                            <Eye className="h-3.5 w-3.5 text-brand-600" />
                             View
                           </button>
                         </td>
@@ -329,7 +303,7 @@ export default function ReportsPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
                 />
               </div>
 
@@ -339,8 +313,8 @@ export default function ReportsPage() {
                 </label>
                 <select
                   value={scope}
-                  onChange={(e) => setScope(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+                  onChange={(e) => setScope(e.target.value as "ALL" | "CHECKLIST" | "CUSTOM")}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 cursor-pointer"
                 >
                   <option value="ALL">All Active Documents & Standards</option>
                   <option value="CHECKLIST">Specific Regulatory Framework</option>
@@ -355,7 +329,7 @@ export default function ReportsPage() {
                   <select
                     value={selectedChecklistId}
                     onChange={(e) => setSelectedChecklistId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 cursor-pointer"
                   >
                     {checklists.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -367,6 +341,7 @@ export default function ReportsPage() {
               )}
             </div>
 
+            <fieldset className="flex flex-wrap gap-4 text-sm"><legend className="text-xs font-semibold mb-2">Report contents</legend><label className="flex items-center gap-2"><input type="checkbox" checked={includeDetails} onChange={e => setIncludeDetails(e.target.checked)} />Detailed findings</label><label className="flex items-center gap-2"><input type="checkbox" checked={includeRecommendations} onChange={e => setIncludeRecommendations(e.target.checked)} />Recommendations</label></fieldset>
             <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -377,16 +352,17 @@ export default function ReportsPage() {
               </button>
               <button
                 type="submit"
-                disabled={isGenerating}
+                disabled={isGenerating || !canEdit}
                 className="px-5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {isGenerating ? "Synthesizing Certificate…" : "Synthesize Certificate"}
-                <ArrowRight className="h-3.5 w-3.5 text-amber-400" />
+                {isGenerating ? "Generating Report…" : "Generate Report"}
+                <ArrowRight className="h-3.5 w-3.5 text-brand-400" />
               </button>
             </div>
           </form>
         </TabsContent>
       </Tabs>
+      <PaginationControls page={page} totalPages={totalPages} total={total} onChange={setPage} />
     </div>
   )
 }

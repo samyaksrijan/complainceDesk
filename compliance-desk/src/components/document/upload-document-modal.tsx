@@ -1,16 +1,16 @@
 "use client"
 
-import { useState } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog"
 import { FileDropzone } from "@/components/ui/file-dropzone"
+import { ArrowRight, CheckCircle2, Upload } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
-import { Upload, CheckCircle2, ArrowRight } from "lucide-react"
 
 interface UploadDocumentModalProps {
   open: boolean
@@ -78,8 +78,10 @@ export function UploadDocumentModal({
         throw new Error(errorData.error || "Upload failed")
       }
 
+      const uploaded = await res.json()
       setUploadSuccess(true)
-      toast.success("Audit document ingested and text extracted")
+      if (uploaded.extractionError) toast.warning("File saved, but extraction failed. Open the document for details.")
+      else toast.success("Audit document ingested and text extracted")
 
       setTimeout(() => {
         resetForm()
@@ -100,7 +102,7 @@ export function UploadDocumentModal({
       <DialogContent className="sm:max-w-md bg-white border border-slate-200 text-slate-900 p-6 rounded-2xl shadow-xl font-sans">
         <DialogHeader className="space-y-1">
           <div className="flex items-center gap-2 mb-1">
-            <div className="h-8 w-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+            <div className="h-8 w-8 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
               <Upload className="h-4 w-4" />
             </div>
             <DialogTitle className="text-lg font-bold text-slate-900 tracking-tight font-display">
@@ -133,7 +135,7 @@ export function UploadDocumentModal({
                 placeholder="e.g. Skyline Tower Q3 Fire Safety Inspection"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
               />
             </div>
 
@@ -142,7 +144,9 @@ export function UploadDocumentModal({
                 Audit File Attachment
               </label>
               <FileDropzone
-                onFileSelected={(f) => {
+                file={file}
+                onFileRemove={() => setFile(null)}
+                onFileSelect={(f) => {
                   setFile(f)
                   if (!name && f?.name) {
                     setName(f.name.replace(/\.[^/.]+$/, ""))
@@ -172,7 +176,7 @@ export function UploadDocumentModal({
                 className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isUploading ? "Extracting & Ingesting…" : "Ingest Document"}
-                <ArrowRight className="h-3.5 w-3.5 text-amber-400" />
+                <ArrowRight className="h-3.5 w-3.5 text-brand-400" />
               </button>
             </div>
           </div>

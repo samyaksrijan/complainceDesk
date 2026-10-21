@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAuth } from "@/lib/rbac"
+import { NextResponse } from "next/server"
 
 // GET /api/notifications/unread-count
 export const GET = withAuth(
@@ -11,6 +11,7 @@ export const GET = withAuth(
       })
       return NextResponse.json({ count })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Unread count error:", error)
       return NextResponse.json({ count: 0 })
     }

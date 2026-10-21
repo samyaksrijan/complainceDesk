@@ -1,8 +1,14 @@
 node_modules
 .next
 .git
-.gitignore
+.env
+.env.*
+!.env.example
 *.log
 uploads
-.env*.local
+test-results
+playwright-report
+.test-db
+coverage
 README.md
+docs

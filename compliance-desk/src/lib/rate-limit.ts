@@ -1,62 +1,31 @@
-import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma";
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 
-// Simple in-memory rate limiter (use Redis in production)
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+interface RateLimitConfig { windowMs: number; maxRequests: number }
 
-// Clean up old entries every 5 minutes
-if (typeof setInterval !== "undefined") {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, value] of rateLimitMap.entries()) {
-      if (now > value.resetTime) {
-        rateLimitMap.delete(key)
-      }
-    }
-  }, 5 * 60 * 1000)
-}
-
-interface RateLimitConfig {
-  windowMs: number   // Time window in milliseconds
-  maxRequests: number // Max requests per window
-}
-
-export function checkRateLimit(
-  identifier: string,
-  config: RateLimitConfig
-): { allowed: boolean; retryAfter?: number } {
+/** Shared fixed-window counters: atomic upsert works across all application instances. */
+export async function checkRateLimit(identifier: string, config: RateLimitConfig): Promise<{ allowed: boolean; retryAfter?: number }> {
   const now = Date.now()
-  const key = identifier
-  const entry = rateLimitMap.get(key)
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + config.windowMs })
-    return { allowed: true }
-  }
-
-  if (entry.count >= config.maxRequests) {
-    const retryAfter = Math.ceil((entry.resetTime - now) / 1000)
-    return { allowed: false, retryAfter }
-  }
-
-  entry.count++
-  return { allowed: true }
+  const window = Math.floor(now / config.windowMs)
+  const expiresAt = new Date((window + 1) * config.windowMs)
+  const key = createHash("sha256").update(`${identifier}:${window}`).digest("hex")
+  const entry = await prisma.rateLimit.upsert({ where: { key }, create: { key, count: 1, expiresAt }, update: { count: { increment: 1 } } })
+  // Bounded housekeeping; expired windows are never reused.
+  if (entry.count === 1) await prisma.rateLimit.deleteMany({ where: { expiresAt: { lt: new Date(now - config.windowMs) } } })
+  return { allowed: entry.count <= config.maxRequests, retryAfter: Math.max(1, Math.ceil((expiresAt.getTime() - now) / 1000)) }
 }
 
-/**
- * Get client IP from request headers.
- */
+/** Enable only behind an ingress that strips/overwrites client-supplied forwarding headers. */
 export function getClientIp(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  )
+  if (process.env.TRUST_PROXY !== "true") return "direct"
+  // ALB appends the connecting client address as the rightmost entry.
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim()
+  return forwarded && isIP(forwarded) ? forwarded : "direct"
 }
-
-// Predefined rate limit configs
 export const RATE_LIMITS = {
-  LOGIN: { windowMs: 15 * 60 * 1000, maxRequests: 30 },      // 30 per 15 min
-  REGISTER: { windowMs: 60 * 60 * 1000, maxRequests: 5 },     // 5 per hour
-  LLM_SCAN: { windowMs: 60 * 1000, maxRequests: 10 },         // 10 per minute
-  GENERAL: { windowMs: 60 * 1000, maxRequests: 100 },          // 100 per minute
+  LOGIN: { windowMs: 15 * 60 * 1000, maxRequests: 30 },
+  REGISTER: { windowMs: 60 * 60 * 1000, maxRequests: 5 },
+  LLM_SCAN: { windowMs: 60 * 1000, maxRequests: 10 },
+  GENERAL: { windowMs: 60 * 1000, maxRequests: 100 },
 }

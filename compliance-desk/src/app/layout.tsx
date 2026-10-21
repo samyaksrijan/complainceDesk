@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Poppins, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
-import { SessionProvider } from "@/components/providers/session-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { SessionProvider } from "@/components/providers/session-provider";
 import { Toaster } from "@/components/ui/sonner";
+import type { Metadata } from "next";
+import { JetBrains_Mono, Plus_Jakarta_Sans, Poppins } from "next/font/google";
+import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   weight: ["600", "700", "800"],
-  variable: "--font-display",
+  variable: "--font-heading",
   subsets: ["latin"],
 });
 
@@ -18,7 +18,7 @@ const poppins = Poppins({
 });
 
 const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
+  variable: "--font-code",
   subsets: ["latin"],
 });
 
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     default: "Compliance Desk",
     template: "%s — Compliance Desk",
   },
-  description: "Enterprise automated compliance management — analyze regulatory documents, evaluate checklists, and generate certified audit reports.",
+  description: "Enterprise automated compliance management — analyze regulatory documents, evaluate checklists, and generate audit reports.",
   icons: {
     icon: "/favicon.ico",
   },

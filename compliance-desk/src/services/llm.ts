@@ -1,12 +1,10 @@
-import Groq from "groq-sdk"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import Groq from "groq-sdk"
 import { z } from "zod"
 
 // ==================== CLIENT INITIALIZATION ====================
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-})
+const groq = () => new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 30000, maxRetries: 0, baseURL: process.env.GROQ_BASE_URL })
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "")
 
@@ -16,9 +14,9 @@ const CONFIG = {
   primaryProvider: process.env.LLM_PRIMARY_PROVIDER || "groq",
   fallbackProvider: process.env.LLM_FALLBACK_PROVIDER || "gemini",
   temperature: parseFloat(process.env.LLM_TEMPERATURE || "0.1"),
-  maxTokens: parseInt(process.env.LLM_MAX_TOKENS || "4096"),
+  maxTokens: parseInt(process.env.LLM_MAX_TOKENS || "8192"),
   groqModel: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
-  geminiModel: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  geminiModel: process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
   maxRetries: 2,
 }
 
@@ -31,8 +29,8 @@ interface LLMResponse {
   tokensUsed?: number
 }
 
-async function callGroq(systemPrompt: string, userPrompt: string): Promise<LLMResponse> {
-  const response = await groq.chat.completions.create({
+async function callGroq(systemPrompt: string, userPrompt: string, signal?: AbortSignal, jsonMode = true): Promise<LLMResponse> {
+  const response = await groq().chat.completions.create({
     model: CONFIG.groqModel,
     temperature: CONFIG.temperature,
     max_tokens: CONFIG.maxTokens,
@@ -40,8 +38,8 @@ async function callGroq(systemPrompt: string, userPrompt: string): Promise<LLMRe
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    response_format: { type: "json_object" },
-  })
+    response_format: jsonMode ? { type: "json_object" } : undefined,
+  }, { signal })
 
   const content = response.choices[0]?.message?.content || ""
   const tokensUsed = response.usage?.total_tokens
@@ -54,13 +52,13 @@ async function callGroq(systemPrompt: string, userPrompt: string): Promise<LLMRe
   }
 }
 
-async function callGemini(systemPrompt: string, userPrompt: string): Promise<LLMResponse> {
+async function callGemini(systemPrompt: string, userPrompt: string, signal?: AbortSignal): Promise<LLMResponse> {
   const model = genAI.getGenerativeModel({
     model: CONFIG.geminiModel,
     systemInstruction: systemPrompt,
   })
 
-  const result = await model.generateContent(userPrompt)
+  const result = await model.generateContent(userPrompt, { timeout: 30000, signal })
   const content = result.response.text()
 
   return {
@@ -75,16 +73,17 @@ async function callGemini(systemPrompt: string, userPrompt: string): Promise<LLM
  * Tries primary provider first, falls back on failure.
  * Retries once on the same provider before switching.
  */
-async function callLLM(systemPrompt: string, userPrompt: string): Promise<LLMResponse> {
-  const primaryFn = CONFIG.primaryProvider === "groq" ? callGroq : callGemini
-  const fallbackFn = CONFIG.fallbackProvider === "groq" ? callGroq : callGemini
+async function callLLM(systemPrompt: string, userPrompt: string, signal?: AbortSignal, jsonMode = true): Promise<LLMResponse> {
+  const invoke = (provider: string) => provider === "groq" ? callGroq(systemPrompt, userPrompt, signal, jsonMode) : callGemini(systemPrompt, userPrompt, signal)
 
   // Try primary provider (with one retry)
   for (let attempt = 1; attempt <= CONFIG.maxRetries; attempt++) {
+    signal?.throwIfAborted()
     try {
-      const result = await primaryFn(systemPrompt, userPrompt)
+      const result = await invoke(CONFIG.primaryProvider)
       return result
-    } catch (error: any) {
+    } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
       console.error(`[LLM] Primary (${CONFIG.primaryProvider}) attempt ${attempt} failed:`, error.message)
       if (attempt === CONFIG.maxRetries) {
         console.log(`[LLM] Primary exhausted, trying fallback...`)
@@ -93,10 +92,12 @@ async function callLLM(systemPrompt: string, userPrompt: string): Promise<LLMRes
   }
 
   // Try fallback provider
+  signal?.throwIfAborted()
   try {
-    const result = await fallbackFn(systemPrompt, userPrompt)
+    const result = await invoke(CONFIG.fallbackProvider)
     return result
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
     console.error(`[LLM] Fallback (${CONFIG.fallbackProvider}) failed:`, error.message)
     throw new Error(`Both LLM providers failed. Last error: ${error.message}`)
   }
@@ -134,7 +135,7 @@ function parseJSON<T>(raw: string, schema: z.ZodSchema<T>): T {
       return schema.parse(parsed)
     }
 
-    throw new Error(`Failed to parse LLM response as JSON. Raw response (first 200 chars): ${raw.substring(0, 200)}`)
+    throw new Error("AI response did not match the expected JSON structure.")
   }
 }
 
@@ -262,13 +263,14 @@ Return ONLY the summary text, no JSON, no formatting.`
 
 const extractedChecklistItemSchema = z.object({
   field_name: z.string().min(1),
-  field_type: z.enum(["number", "boolean", "text", "select"]),
+  field_type: z.enum(["number", "boolean", "text", "select"]).transform(v => v.toUpperCase() as "NUMBER" | "BOOLEAN" | "TEXT" | "SELECT"),
   unit: z.string().nullable().optional(),
   condition: z.enum([
     "less_than", "greater_than", "equals", "range",
     "must_be_present", "must_contain", "is_true",
-  ]),
-  threshold_value: z.any(),
+  ]).transform(v => v.toUpperCase() as import("@prisma/client").Condition),
+  threshold_value: z.union([z.number(), z.string(), z.boolean(), z.array(z.number()), z.null()]),
+  options: z.array(z.string()).optional(),
   source_text: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),
   regulation_ref: z.string().nullable().optional(),
@@ -283,6 +285,7 @@ const extractedValueSchema = z.object({
   extracted_value: z.string().nullable(),
   source_excerpt: z.string().nullable(),
   found: z.boolean(),
+  needs_review: z.boolean().optional(),
   note: z.string().nullable().optional(),
 })
 
@@ -319,8 +322,8 @@ export interface ValueExtractionResult {
  * @param documentText - Raw text extracted from compliance document
  * @returns Structured checklist items with confidence scores
  */
-export async function scanChecklistDocument(
-  documentText: string
+async function scanChecklistChunk(
+  documentText: string, signal?: AbortSignal
 ): Promise<ChecklistScanResult> {
   if (!documentText || documentText.trim().length < 50) {
     throw new Error("Document text is too short to scan (minimum 50 characters)")
@@ -338,15 +341,17 @@ export async function scanChecklistDocument(
 
   for (let attempt = 1; attempt <= CONFIG.maxRetries; attempt++) {
     try {
-      const response = await callLLM(CHECKLIST_SCAN_SYSTEM_PROMPT, userPrompt)
+      const response = await callLLM(CHECKLIST_SCAN_SYSTEM_PROMPT, userPrompt, signal)
 
       const parsed = parseJSON(response.content, checklistScanResponseSchema)
 
       // Normalize field types and conditions to uppercase (for Prisma enum)
       const normalizedItems = parsed.items.map((item, index) => ({
         ...item,
-        field_type: item.field_type.toUpperCase() as any,
-        condition: item.condition.toUpperCase() as any,
+        field_type: item.field_type,
+        threshold_value: item.field_type === "BOOLEAN" ? (typeof item.threshold_value === "boolean" ? item.threshold_value : true) : item.threshold_value,
+        options: item.options || (item.field_type === "SELECT" && typeof item.threshold_value === "string" ? [item.threshold_value] : undefined),
+        condition: item.condition,
         // Ensure confidence defaults if missing
         confidence: item.confidence ?? 0.5,
         // Ensure unit is null not undefined
@@ -358,13 +363,14 @@ export async function scanChecklistDocument(
       }))
 
       return {
-        items: normalizedItems as any,
+        items: normalizedItems,
         rawResponse: response.content,
         provider: response.provider,
         model: response.model,
         tokensUsed: response.tokensUsed,
       }
-    } catch (error: any) {
+    } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
       lastError = error
       console.error(`[Scan] Attempt ${attempt} failed:`, error.message)
 
@@ -385,15 +391,15 @@ export async function scanChecklistDocument(
  * @param fields - Array of checklist field definitions
  * @returns Extracted values with source excerpts
  */
-export async function extractDocumentValues(
+async function extractValuesChunk(
   documentText: string,
   fields: Array<{
     fieldName: string
     fieldType: string
     condition: string
-    thresholdValue: any
+    thresholdValue: unknown
     unit?: string | null
-  }>
+  }>, signal?: AbortSignal
 ): Promise<ValueExtractionResult> {
   if (!documentText || documentText.trim().length < 20) {
     throw new Error("Document text is too short to extract values from")
@@ -428,7 +434,7 @@ export async function extractDocumentValues(
 
   for (let attempt = 1; attempt <= CONFIG.maxRetries; attempt++) {
     try {
-      const response = await callLLM(VALUE_EXTRACTION_SYSTEM_PROMPT, userPrompt)
+      const response = await callLLM(VALUE_EXTRACTION_SYSTEM_PROMPT, userPrompt, signal)
 
       const parsed = parseJSON(response.content, valueExtractionResponseSchema)
 
@@ -439,7 +445,8 @@ export async function extractDocumentValues(
         model: response.model,
         tokensUsed: response.tokensUsed,
       }
-    } catch (error: any) {
+    } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
       lastError = error
       console.error(`[Extract] Attempt ${attempt} failed:`, error.message)
     }
@@ -480,9 +487,10 @@ Details:
 ${detailsText}`
 
   try {
-    const response = await callLLM(SUMMARY_SYSTEM_PROMPT, userPrompt)
+    const response = await callLLM(SUMMARY_SYSTEM_PROMPT, userPrompt, AbortSignal.timeout(30000), false)
     return response.content.trim()
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
     console.error("[Summary] Generation failed:", error.message)
     // Return a basic summary if LLM fails
     return `Compliance check completed: ${results.passedItems} of ${results.totalItems} items passed. ${results.failedItems} failed. ${results.notFoundItems} values not found in document.`
@@ -515,4 +523,44 @@ export async function healthCheck(): Promise<{
   }
 
   return results
+}
+
+export function splitDocument(text: string, size = 12000): string[] {
+  if (text.length > 240000) throw new Error("Document exceeds the 240,000 character analysis limit. Split it into smaller documents.")
+  const chunks: string[] = []
+  for (let start = 0; start < text.length; start += size - 500) {
+    chunks.push(text.slice(start, start + size))
+    if (start + size >= text.length) break
+  }
+  return chunks
+}
+
+export async function scanChecklistDocument(text: string): Promise<ChecklistScanResult> {
+  const signal = AbortSignal.timeout(180000)
+  const results: ChecklistScanResult[] = []
+  for (const chunk of splitDocument(text)) results.push(await scanChecklistChunk(chunk, signal))
+  if (!results.length) throw new Error("Document has no text")
+  const unique = new Map<string, ExtractedChecklistItem>()
+  for (const result of results) for (const item of result.items) {
+    const key = item.field_name.toLowerCase().trim() + ':' + item.condition + ':' + JSON.stringify(item.threshold_value)
+    if (!unique.has(key)) unique.set(key, item)
+  }
+  return { ...results[0], items: [...unique.values()], tokensUsed: results.reduce((n,r) => n + (r.tokensUsed || 0), 0) }
+}
+
+export async function extractDocumentValues(text: string, fields: Parameters<typeof extractValuesChunk>[1]): Promise<ValueExtractionResult> {
+  const signal = AbortSignal.timeout(180000)
+  const results: ValueExtractionResult[] = []
+  for (const chunk of splitDocument(text)) {
+    for (let offset = 0; offset < fields.length; offset += 20) results.push(await extractValuesChunk(chunk, fields.slice(offset, offset + 20), signal))
+  }
+  if (!results.length) throw new Error("Document has no text")
+  const extractions = fields.map(field => {
+    const candidates = results.flatMap(r => r.extractions).filter(e => e.field_name.toLowerCase().trim() === field.fieldName.toLowerCase().trim())
+    const found = candidates.filter(e => e.found && e.extracted_value !== null)
+    const values = new Set(found.map(e => e.extracted_value?.trim().toLowerCase()))
+    if (values.size > 1) return { field_name: field.fieldName, found: true, extracted_value: found.map(e => e.extracted_value).join(" / "), source_excerpt: found.map(e => e.source_excerpt).filter(Boolean).join("; "), note: "Conflicting values across document sections require manual review.", needs_review: true }
+    return found[0] || candidates[0] || { field_name: field.fieldName, found: false, extracted_value: null, source_excerpt: null }
+  })
+  return { ...results[0], extractions, tokensUsed: results.reduce((n,r) => n + (r.tokensUsed || 0), 0) }
 }

@@ -1,17 +1,17 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAuth } from "@/lib/rbac"
+import { Prisma, Role } from "@prisma/client"
+import { NextResponse } from "next/server"
 import { z } from "zod"
-import { Role } from "@prisma/client"
 
 const generateSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
   checklistId: z.string().optional(),
-  documentIds: z.array(z.string()).optional(),
+  documentIds: z.array(z.string()).min(1).max(1000).optional(),
   dateRange: z.object({
-    from: z.string(),
-    to: z.string()
-  }).optional(),
+    from: z.string().datetime(),
+    to: z.string().datetime()
+  }).refine(v => new Date(v.from) <= new Date(v.to), "Start must precede end").optional(),
   includeDetails: z.boolean().default(true),
   includeRecommendations: z.boolean().default(true),
 })
@@ -38,6 +38,9 @@ export const POST = withAuth(
         includeRecommendations,
       } = parsed.data
 
+      if (checklistId && !await prisma.checklist.findFirst({ where: { id: checklistId, OR: [{ orgId: user.orgId }, { isSystemTemplate: true }] } })) return NextResponse.json({ error: "Checklist not found" }, { status: 404 })
+      if (documentIds && await prisma.document.count({ where: { id: { in: [...new Set(documentIds)] }, orgId: user.orgId } }) !== new Set(documentIds).size) return NextResponse.json({ error: "One or more documents were not found" }, { status: 404 })
+      // Complete aggregation within the request; no process-local background job.
       // Create the report in GENERATING state
       const report = await prisma.report.create({
         data: {
@@ -53,11 +56,12 @@ export const POST = withAuth(
         },
       })
 
-      // Kick off background generation (fire and forget)
-      generateReportContent(report.id, user.orgId, parsed.data).catch(console.error)
-
-      return NextResponse.json({ reportId: report.id, status: "GENERATING" }, { status: 202 })
+      await generateReportContent(report.id, user.orgId, parsed.data)
+      const completed = await prisma.report.findUniqueOrThrow({ where: { id: report.id } })
+      if (completed.status !== "READY") return NextResponse.json({ error: "No analyzed documents matched the criteria, or aggregation failed.", reportId: report.id }, { status: 422 })
+      return NextResponse.json({ reportId: report.id, status: "READY" }, { status: 201 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Generate report error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -69,13 +73,11 @@ export const POST = withAuth(
 )
 
 // Background worker function
-async function generateReportContent(reportId: string, orgId: string, options: any) {
-  // Simulate delay for generation (e.g. 5 seconds)
-  await new Promise((resolve) => setTimeout(resolve, 5000))
+async function generateReportContent(reportId: string, orgId: string, options: z.infer<typeof generateSchema>) {
 
   try {
     // 1. Fetch matching documents and their compliance results
-    const where: any = { orgId }
+    const where: Prisma.DocumentWhereInput = { orgId }
     
     if (options.documentIds && options.documentIds.length > 0) {
       where.id = { in: options.documentIds }
@@ -90,12 +92,15 @@ async function generateReportContent(reportId: string, orgId: string, options: a
       }
     }
     
+    where.results = { some: {} }
     where.status = { in: ["COMPLIANT", "NON_COMPLIANT"] } // Only analyzed documents
 
     const documents = await prisma.document.findMany({
       where,
       include: {
         results: {
+          orderBy: { generatedAt: "desc" },
+          take: 1,
           include: {
             items: {
               include: {
@@ -214,7 +219,7 @@ async function generateReportContent(reportId: string, orgId: string, options: a
         status: "READY",
         documentCount: documents.length,
         averageScore,
-        content: reportContent,
+        content: JSON.parse(JSON.stringify(reportContent)),
         completedAt: new Date(),
       }
     })

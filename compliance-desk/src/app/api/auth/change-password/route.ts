@@ -1,18 +1,14 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { registerSchema } from "@/lib/validation"
 import bcrypt from "bcryptjs"
+import { getServerSession } from "next-auth"
+import { NextResponse } from "next/server"
 import { z } from "zod"
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(128, "Password must be 128 characters or less")
-    .refine((val) => /[a-zA-Z]/.test(val), "Must contain a letter")
-    .refine((val) => /[0-9]/.test(val), "Must contain a number"),
+  newPassword: registerSchema.shape.password,
 })
 
 export async function POST(request: Request) {
@@ -64,11 +60,12 @@ export async function POST(request: Request) {
     const newHash = await bcrypt.hash(newPassword, 12)
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { passwordHash: newHash },
+      data: { passwordHash: newHash, passwordChangedAt: new Date() },
     })
 
     return NextResponse.json({ message: "Password changed successfully" })
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Change password error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

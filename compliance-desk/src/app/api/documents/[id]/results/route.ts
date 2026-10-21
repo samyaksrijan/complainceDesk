@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { SessionUser } from "@/lib/rbac"
+import { NextResponse } from "next/server"
 
 // GET /api/documents/[id]/results
 // Get the latest compliance result for a document
@@ -68,6 +68,7 @@ export async function GET(
 
     return NextResponse.json(result)
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Get results error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

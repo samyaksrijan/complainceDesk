@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server"
-import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
 import { registerSchema, sanitizeText } from "@/lib/validation"
-import { checkRateLimit, RATE_LIMITS, getClientIp } from "@/lib/rate-limit"
+import bcrypt from "bcryptjs"
+import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
   try {
     // Fix 7: Rate limit registration
     const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`register:${ip}`, RATE_LIMITS.REGISTER)
+    const rateLimit = await checkRateLimit(`register:${ip}`, RATE_LIMITS.REGISTER)
 
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -90,6 +90,7 @@ export async function POST(req: Request) {
       { status: 201 }
     )
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Registration error:", error)
     return NextResponse.json(
       { 

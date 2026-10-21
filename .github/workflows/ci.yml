@@ -1,0 +1,51 @@
+name: Verify application
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: compliance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: compliance-desk/package-lock.json
+      - run: npm ci
+        working-directory: compliance-desk
+      - run: npx prisma generate
+        working-directory: compliance-desk
+      - run: npm run lint
+        working-directory: compliance-desk
+      - run: npm run typecheck
+        working-directory: compliance-desk
+      - run: npm test
+        working-directory: compliance-desk
+      - run: npm run build
+        working-directory: compliance-desk
+      - run: npx playwright install --with-deps chromium
+        working-directory: compliance-desk
+      - run: node scripts/fetch-ocr-data.mjs /tmp/compliance-ocr-data
+        working-directory: compliance-desk
+      - run: npm run test:integration
+        working-directory: compliance-desk
+        env:
+          TEST_TESSERACT_LANG_PATH: /tmp/compliance-ocr-data
+          TEST_DATABASE_URL: postgresql://postgres:test-only-password@127.0.0.1:5432/compliance_test
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: compliance-desk
+      - run: docker build -t compliance-desk:ci compliance-desk

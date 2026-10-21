@@ -44,3 +44,10 @@ next-env.d.ts
 uploads/*
 !uploads/.gitkeep
 test-files/
+
+!.env.example
+!test-files/
+!test-files/sample-audit.txt
+playwright-report/
+test-results/
+.test-db/

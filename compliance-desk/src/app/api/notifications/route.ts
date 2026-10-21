@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAuth } from "@/lib/rbac"
+import { NotificationType, Prisma, Role } from "@prisma/client"
+import { NextResponse } from "next/server"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -32,12 +33,12 @@ export const GET = withAuth(
       const readStatus = url.searchParams.get("readStatus") || ""
       const search = url.searchParams.get("search") || ""
 
-      const where: any = { userId: user.id }
+      const where: Prisma.NotificationWhereInput = { userId: user.id }
 
       if (unreadOnly || readStatus === "UNREAD") where.read = false
       else if (readStatus === "READ") where.read = true
 
-      if (type) where.type = type
+      if (type && Object.values(NotificationType).includes(type as NotificationType)) where.type = type as NotificationType
 
       if (search) {
         where.OR = [
@@ -66,6 +67,7 @@ export const GET = withAuth(
         totalPages: Math.ceil(total / limit),
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Get notifications error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -76,7 +78,7 @@ export const GET = withAuth(
 )
 
 // POST /api/notifications (internal - create a notification, no RBAC needed from services)
-export async function POST(req: Request) {
+export const POST = withAuth(async (req: Request, { user: actor }) => {
   try {
     const body = await req.json()
     const parsed = createSchema.safeParse(body)
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
 
     // Get user's orgId
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, orgId: actor.orgId },
       select: { orgId: true },
     })
 
@@ -103,6 +105,8 @@ export async function POST(req: Request) {
     const notification = await prisma.notification.create({
       data: {
         ...data,
+        actorId: actor.id,
+        actorName: actor.name,
         userId,
         orgId: user.orgId,
       },
@@ -110,10 +114,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json(notification, { status: 201 })
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Create notification error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },
       { status: 500 }
     )
   }
-}
+}, [Role.ADMIN])

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAdmin, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAdmin } from "@/lib/rbac"
+import { NextResponse } from "next/server"
 
 // GET /api/admin/users/stats
 export const GET = withAdmin(
@@ -24,6 +24,7 @@ export const GET = withAdmin(
 
       return NextResponse.json(stats)
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("User stats error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

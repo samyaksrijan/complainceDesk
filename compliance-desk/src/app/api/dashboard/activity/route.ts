@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAnyRole, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAnyRole } from "@/lib/rbac"
 import { getRecentActivity } from "@/services/activity"
+import { NextResponse } from "next/server"
 
 // GET /api/dashboard/activity
 export const GET = withAnyRole(
@@ -29,6 +29,7 @@ export const GET = withAnyRole(
         },
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Activity feed error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

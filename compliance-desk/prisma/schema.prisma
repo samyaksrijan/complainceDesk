@@ -36,6 +36,10 @@ model User {
   activityLogs  ActivityLog[]
   notifications Notification[]
   reports       Report[]
+  emailNotifications Boolean @default(true)
+  analysisCompleteNotifications Boolean @default(true)
+  weeklyDigest Boolean @default(false)
+  resetTokens PasswordResetToken[]
   passwordChangedAt DateTime?
   lastLoginAt  DateTime?
   status       UserStatus    @default(ACTIVE)
@@ -76,6 +80,7 @@ model Checklist {
   items            ChecklistItem[]
   matchResults     ComplianceResult[]
   isTemplate       Boolean            @default(false)
+  isSystemTemplate Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   matchedDocuments Document[]         @relation("MatchedChecklist")
@@ -84,6 +89,7 @@ model Checklist {
   @@index([orgId])
   @@index([category])
   @@index([isTemplate])
+  @@index([isSystemTemplate])
 }
 
 enum SourceType {
@@ -138,6 +144,7 @@ model Document {
   fileUrl             String
   fileType            String
   extractedText       String?            @db.Text
+  processingStartedAt DateTime?
   status              DocumentStatus     @default(UPLOADED)
   matchedChecklist    Checklist?         @relation("MatchedChecklist", fields: [matchedChecklistId], references: [id])
   matchedChecklistId  String?
@@ -212,7 +219,7 @@ model ActivityLog {
   id           String       @id @default(cuid())
   org          Organization @relation(fields: [orgId], references: [id])
   orgId        String
-  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId       String?
   action       String
   resourceType String
@@ -297,3 +304,20 @@ enum ReportStatus {
 }
 
 
+
+model PasswordResetToken {
+  tokenHash String @id
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RateLimit {
+  key String @id
+  count Int @default(1)
+  expiresAt DateTime
+  @@index([expiresAt])
+}

@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAdmin, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAdmin } from "@/lib/rbac"
+import { registerSchema } from "@/lib/validation"
 import { logActivity } from "@/services/activity"
+import { Prisma, Role, UserStatus } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { NextResponse } from "next/server"
 import { z } from "zod"
 
 // GET /api/admin/users
@@ -17,7 +19,7 @@ export const GET = withAdmin(
       const role = url.searchParams.get("role") || ""
       const status = url.searchParams.get("status") || ""
 
-      const where: any = { orgId: user.orgId, status: { not: "DELETED" } }
+      const where: Prisma.UserWhereInput = { orgId: user.orgId, status: { not: "DELETED" } }
 
       if (search) {
         where.OR = [
@@ -25,8 +27,8 @@ export const GET = withAdmin(
           { email: { contains: search, mode: "insensitive" } },
         ]
       }
-      if (role) where.role = role
-      if (status) where.status = status
+      if (role && Object.values(Role).includes(role as Role)) where.role = role as Role
+      if (status && Object.values(UserStatus).includes(status as UserStatus)) where.status = status as UserStatus
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
@@ -71,6 +73,7 @@ export const GET = withAdmin(
         totalPages: Math.ceil(total / limit),
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("List users error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -82,9 +85,9 @@ export const GET = withAdmin(
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
-  email: z.string().email("Invalid email format"),
+  email: z.string().email("Invalid email format").transform(v => v.toLowerCase().trim()),
   role: z.enum(["ADMIN", "AUDITOR", "VIEWER"]),
-  temporaryPassword: z.string().min(8),
+  temporaryPassword: registerSchema.shape.password,
 })
 
 // POST /api/admin/users
@@ -149,6 +152,7 @@ export const POST = withAdmin(
         role: newUser.role,
       }, { status: 201 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Create user error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

@@ -4,9 +4,14 @@ import bcrypt from "bcryptjs"
 const prisma = new PrismaClient()
 
 async function main() {
+  if (process.env.NODE_ENV === "production") throw new Error("Demo seeding is disabled in production. Register the first organization instead.")
   console.log("Seeding database...")
 
   // Clean existing data
+  await prisma.report.deleteMany()
+  await prisma.notification.deleteMany()
+  await prisma.passwordResetToken.deleteMany()
+  await prisma.rateLimit.deleteMany()
   await prisma.activityLog.deleteMany()
   await prisma.complianceResultItem.deleteMany()
   await prisma.complianceResult.deleteMany()
@@ -76,6 +81,7 @@ async function main() {
       tags: ["safety", "structural", "building"],
       sourceType: "TEMPLATE",
       isTemplate: true,
+      isSystemTemplate: true,
       orgId: org.id,
       createdById: admin.id,
       items: {
@@ -166,6 +172,7 @@ async function main() {
       tags: ["safety", "fire", "emergency"],
       sourceType: "TEMPLATE",
       isTemplate: true,
+      isSystemTemplate: true,
       orgId: org.id,
       createdById: admin.id,
       items: {
@@ -236,6 +243,7 @@ async function main() {
       tags: ["environmental", "emissions", "waste"],
       sourceType: "TEMPLATE",
       isTemplate: true,
+      isSystemTemplate: true,
       orgId: org.id,
       createdById: admin.id,
       items: {

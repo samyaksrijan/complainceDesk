@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAnyRole, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAnyRole } from "@/lib/rbac"
 import { parsePagination } from "@/lib/validation"
-import { Prisma, DocumentStatus } from "@prisma/client"
+import { DocumentStatus, Prisma } from "@prisma/client"
+import { NextResponse } from "next/server"
 
 // GET /api/documents — List documents
 export const GET = withAnyRole(
@@ -54,7 +54,7 @@ export const GET = withAnyRole(
         status: doc.status,
         matchedChecklist: doc.matchedChecklist,
         uploadedBy: doc.uploadedBy,
-        latestScore: doc.results[0]?.overallScore || null,
+        latestScore: doc.results[0]?.overallScore ?? null,
         createdAt: doc.createdAt,
       }))
 
@@ -68,6 +68,7 @@ export const GET = withAnyRole(
         },
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("List documents error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

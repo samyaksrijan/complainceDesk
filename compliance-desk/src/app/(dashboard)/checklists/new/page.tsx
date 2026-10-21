@@ -1,19 +1,19 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-import { usePageTitle } from "@/lib/use-page-title"
 import { ChecklistForm } from "@/components/checklist/checklist-form"
 import { api } from "@/lib/api"
+import { usePageTitle } from "@/lib/use-page-title"
+import { useRouter } from "next/navigation"
 
 export default function NewChecklistPage() {
   const router = useRouter()
   usePageTitle("Create Checklist")
 
-  const handleSubmit = async (payload: any) => {
-    return await api.post("/api/checklists", payload)
+  const handleSubmit = async (payload: import("@/lib/validation").CreateChecklistInput) => {
+    return await api.post<{ id: string }>("/api/checklists", payload)
   }
 
-  const handleSuccess = (data: any) => {
+  const handleSuccess = (data: { id: string }) => {
     router.push(`/checklists/${data.id}`)
   }
 

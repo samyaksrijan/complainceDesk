@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { SessionUser } from "@/lib/rbac"
 import { extractDocumentValues } from "@/services/llm"
-import { checkRateLimit, RATE_LIMITS, getClientIp } from "@/lib/rate-limit"
+import { NextResponse } from "next/server"
 
 // POST /api/scan/extract-values
 // Extract actual values from an audit document for given checklist fields.
@@ -32,8 +32,7 @@ export async function POST(req: Request) {
     }
 
     // Fix 7: Rate limit LLM-consuming endpoints
-    const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`extract:${ip}`, RATE_LIMITS.LLM_SCAN)
+    const rateLimit = await checkRateLimit(`extract:${user.id}`, RATE_LIMITS.LLM_SCAN)
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
@@ -73,13 +72,15 @@ export async function POST(req: Request) {
       )
     }
 
+    if (document.extractedText.length > 240000) return NextResponse.json({ error: "Split documents above 240,000 extracted characters before extraction." }, { status: 413 })
+
     // Fetch checklist with items
     const checklist = await prisma.checklist.findFirst({
       where: {
         id: checklistId,
         OR: [
           { orgId: user.orgId },
-          { isTemplate: true },
+          { isSystemTemplate: true },
         ],
       },
       include: {
@@ -125,7 +126,9 @@ export async function POST(req: Request) {
         valuesFound: result.extractions.filter((e) => e.found).length,
       },
     })
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Extract values error:", error)
 
     if (error.message?.includes("LLM providers failed")) {

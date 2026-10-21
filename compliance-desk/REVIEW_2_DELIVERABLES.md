@@ -1,3 +1,5 @@
+> Historical review dossier. Current implementation, verification evidence and AWS instructions are maintained in [README.md](README.md), [docs/VERIFICATION.md](docs/VERIFICATION.md) and [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md).
+
 # Compliance Desk — Review 2 Deliverables Dossier
 **Project Name:** Compliance Desk  
 **System Classification:** Enterprise Automated Compliance & Audit Management Platform  

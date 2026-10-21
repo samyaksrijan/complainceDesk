@@ -1,0 +1,95 @@
+{
+  "family": "compliance-desk",
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/compliance-desk-execution",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/compliance-desk-app",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/compliance-desk:COMMIT_SHA",
+      "essential": true,
+      "memoryReservation": 1024,
+      "memory": 2048,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NEXTAUTH_URL",
+          "value": "https://compliance.example.com"
+        },
+        {
+          "name": "STORAGE_DRIVER",
+          "value": "s3"
+        },
+        {
+          "name": "S3_BUCKET",
+          "value": "YOUR_PRIVATE_BUCKET"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "REGION"
+        },
+        {
+          "name": "EMAIL_FROM",
+          "value": "Compliance Desk <verified@example.com>"
+        },
+        {
+          "name": "TRUST_PROXY",
+          "value": "true"
+        },
+        {
+          "name": "GROQ_MODEL",
+          "value": "openai/gpt-oss-120b"
+        },
+        {
+          "name": "LLM_MAX_TOKENS",
+          "value": "8192"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:REGION:ACCOUNT_ID:parameter/compliance-desk/DATABASE_URL"
+        },
+        {
+          "name": "NEXTAUTH_SECRET",
+          "valueFrom": "arn:aws:ssm:REGION:ACCOUNT_ID:parameter/compliance-desk/NEXTAUTH_SECRET"
+        },
+        {
+          "name": "GROQ_API_KEY",
+          "valueFrom": "arn:aws:ssm:REGION:ACCOUNT_ID:parameter/compliance-desk/GROQ_API_KEY"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 40
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/compliance-desk",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "app"
+        }
+      }
+    }
+  ],
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX",
+    "cpuArchitecture": "X86_64"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/compliance-desk-execution",
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX",
+    "cpuArchitecture": "X86_64"
+  },
+  "family": "compliance-desk-migrate",
+  "containerDefinitions": [
+    {
+      "name": "migrate",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/compliance-desk:COMMIT_SHA-migrate",
+      "essential": true,
+      "memoryReservation": 256,
+      "memory": 512,
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:REGION:ACCOUNT_ID:parameter/compliance-desk/DATABASE_URL"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/compliance-desk",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "migrate"
+        }
+      }
+    }
+  ]
+}

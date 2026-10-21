@@ -1,16 +1,11 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuditorOrAdmin, withAdmin, withAnyRole, SessionUser } from "@/lib/rbac"
+import { SessionUser } from "@/lib/rbac"
 import { updateChecklistSchema } from "@/lib/validation"
 import { logActivity } from "@/services/activity"
-
-interface RouteContext {
-  user: SessionUser
-  params: { id: string }
-}
+import { NextResponse } from "next/server"
 
 // GET /api/checklists/[id] — Get single checklist with all items
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const session = await (await import("@/lib/auth")).authOptions
@@ -32,7 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         id: id,
         OR: [
           { orgId: user.orgId },
-          { isTemplate: true },
+          { isSystemTemplate: true },
         ],
       },
       include: {
@@ -50,6 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json(checklist)
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Get checklist error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -59,7 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 // PUT /api/checklists/[id] — Update checklist metadata and/or replace items
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const { getServerSession } = await import("next-auth")
@@ -110,11 +106,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const data = parsed.data
+    if (data.items && await prisma.complianceResult.count({ where: { checklistId: id } })) {
+      return NextResponse.json({ error: "This checklist has historical results. Clone it before changing criteria to preserve the audit trail.", code: "CONFLICT" }, { status: 409 })
+    }
 
     // Update in a transaction
     const updated = await prisma.$transaction(async (tx) => {
       // Update metadata fields
-      const updateData: any = {}
+      const updateData: import("@prisma/client").Prisma.ChecklistUpdateInput = {}
       if (data.name !== undefined) updateData.name = data.name
       if (data.description !== undefined) updateData.description = data.description
       if (data.category !== undefined) updateData.category = data.category
@@ -135,9 +134,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             unit: item.unit || null,
             condition: item.condition,
             thresholdValue: item.thresholdValue,
-            options: item.options || null,
+            options: item.options || undefined,
             sourceText: item.sourceText || null,
-            confidence: item.confidence || null,
+            confidence: item.confidence ?? null,
             regulationRef: item.regulationRef || null,
             sortOrder: item.sortOrder,
           })),
@@ -158,7 +157,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     })
 
     // Fix 23: Use logActivity service
-    logActivity({
+    await logActivity({
       orgId: user.orgId,
       userId: user.id,
       action: "checklist.updated",
@@ -169,6 +168,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json(updated)
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Update checklist error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -178,7 +178,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 // DELETE /api/checklists/[id] — Delete checklist
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const { getServerSession } = await import("next-auth")
@@ -233,7 +233,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     })
 
     // Fix 23: Use logActivity service
-    logActivity({
+    await logActivity({
       orgId: user.orgId,
       userId: user.id,
       action: "checklist.deleted",
@@ -244,6 +244,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Delete checklist error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

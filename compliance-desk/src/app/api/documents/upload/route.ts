@@ -1,9 +1,11 @@
-import { NextResponse } from "next/server"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
+import { boundedFormData, PayloadTooLarge } from "@/lib/request-body"
 import { prisma } from "@/lib/prisma"
-import { withAuditorOrAdmin, SessionUser } from "@/lib/rbac"
-import { saveFile } from "@/services/storage"
-import { extractText, getFileType, isSupportedFileType, isWithinSizeLimit } from "@/services/extraction"
+import { SessionUser } from "@/lib/rbac"
 import { logActivity } from "@/services/activity"
+import { extractText, getFileType, isSupportedFileType, isWithinSizeLimit } from "@/services/extraction"
+import { deleteFile, saveFile } from "@/services/storage"
+import { NextResponse } from "next/server"
 
 // POST /api/documents/upload
 export async function POST(req: Request) {
@@ -29,8 +31,11 @@ export async function POST(req: Request) {
       )
     }
 
+    const allowance = await checkRateLimit(`upload:${user.id}`, RATE_LIMITS.LLM_SCAN)
+    if (!allowance.allowed) return NextResponse.json({ error: "Too many uploads. Try again shortly." }, { status: 429 })
+
     // Parse multipart form data
-    const formData = await req.formData()
+    const formData = await boundedFormData(req, (Number(process.env.MAX_FILE_SIZE_MB) || 10) * 1024 * 1024 + 1024 * 1024)
     const file = formData.get("file") as File | null
     const name = formData.get("name") as string | null
 
@@ -97,7 +102,7 @@ export async function POST(req: Request) {
         orgId: user.orgId,
         uploadedById: user.id,
       },
-    })
+    }).catch(async (error) => { await deleteFile(filePath); throw error })
 
     // Trigger text extraction (synchronous for now)
     // Update status to PROCESSING first
@@ -114,7 +119,7 @@ export async function POST(req: Request) {
         where: { id: document.id },
         data: {
           status: "UPLOADED",
-          extractedText: `[Extraction Error: ${extraction.error}]`,
+          extractedText: null,
         },
       })
 
@@ -142,7 +147,7 @@ export async function POST(req: Request) {
     })
 
     // Fix 23: Use logActivity service
-    logActivity({
+    await logActivity({
       orgId: user.orgId,
       userId: user.id,
       action: "document.uploaded",
@@ -157,7 +162,10 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json(updatedDocument, { status: 201 })
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof PayloadTooLarge) return NextResponse.json({ error: error.message }, { status: 413 })
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Document upload error:", error)
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

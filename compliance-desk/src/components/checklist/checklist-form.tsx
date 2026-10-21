@@ -1,19 +1,22 @@
 "use client"
+import { useAuth } from "@/components/providers/auth-provider"
+import { api } from "@/lib/api"
+import { createChecklistSchema } from "@/lib/validation"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/layout/page-header"
+import { ArrowLeft, Plus, Save } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { toast } from "sonner"
 import { ChecklistItemEditor } from "./checklist-item-editor"
 import {
-  ChecklistItemData,
-  DEFAULT_CONDITIONS,
-  getDefaultThreshold,
-  createItem,
+    ChecklistItemData,
+    createItem,
+    DEFAULT_CONDITIONS,
+    getDefaultThreshold,
 } from "./checklist-types"
-import { toast } from "sonner"
-import { Plus, Save, ArrowLeft } from "lucide-react"
 
-interface ChecklistFormProps {
+export interface ChecklistFormProps {
   mode: "create" | "edit"
   initialData?: {
     name: string
@@ -21,8 +24,8 @@ interface ChecklistFormProps {
     isTemplate: boolean
     items: ChecklistItemData[]
   }
-  onSubmit: (payload: any) => Promise<{ error: string | null; data: any }>
-  onSuccess: (data: any) => void
+  onSubmit: (payload: import("@/lib/validation").CreateChecklistInput) => Promise<{ error: string | null; data: { id: string } | null }>
+  onSuccess: (data: { id: string }) => void
   cancelUrl: string
 }
 
@@ -34,6 +37,7 @@ export function ChecklistForm({
   cancelUrl,
 }: ChecklistFormProps) {
   const router = useRouter()
+  const { canEdit, isLoading } = useAuth()
 
   const [name, setName] = useState(initialData?.name || "")
   const [description, setDescription] = useState(initialData?.description || "")
@@ -41,8 +45,22 @@ export function ChecklistForm({
   const [items, setItems] = useState<ChecklistItemData[]>(
     initialData?.items || [createItem(0), createItem(1), createItem(2)]
   )
+  const [isScanning, setIsScanning] = useState(false)
+  const [scanFile, setScanFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  async function scanPolicy() {
+    if (!scanFile) return
+    if (scanFile.size > 10 * 1024 * 1024) { toast.error("Maximum file size is 10 MB"); return }
+    setIsScanning(true)
+    const body = new FormData(); body.append("file", scanFile)
+    const result = await api.post<{ items: import("@/services/llm").ExtractedChecklistItem[] }>("/api/scan/checklist", body)
+    setIsScanning(false)
+    if (result.error || !result.data) { toast.error(result.error || "Scan failed"); return }
+    setItems(result.data.items.map((item, index) => ({ ...createItem(index), fieldName: item.field_name, fieldType: item.field_type, condition: item.condition, thresholdValue: item.threshold_value ?? getDefaultThreshold(item.field_type, item.condition), unit: item.unit || "", options: item.options || [], description: item.source_text || "" })))
+    toast.success("Policy scanned. Review the criteria before saving.")
+  }
 
   // Add new item
   const addItem = () => {
@@ -103,7 +121,7 @@ export function ChecklistForm({
       const duplicate: ChecklistItemData = {
         ...source,
         id: createItem(0).id, // generate new ID
-        name: `${source.name} (copy)`,
+        fieldName: `${source.fieldName} (copy)`,
         sortOrder: index + 1,
       }
       const next = [...prev]
@@ -134,7 +152,7 @@ export function ChecklistForm({
     }
 
     items.forEach((item, index) => {
-      if (!item.name.trim()) {
+      if (!item.fieldName.trim()) {
         newErrors[`item_${index}_name`] = "Field name is required"
       }
       if (item.fieldType === "SELECT" && item.options.length === 0) {
@@ -162,29 +180,35 @@ export function ChecklistForm({
       name: name.trim(),
       description: description.trim() || undefined,
       isTemplate,
+      tags: [],
       items: items.map((item) => ({
-        name: item.name.trim(),
+        fieldName: item.fieldName.trim(),
         fieldType: item.fieldType,
         condition: item.condition,
         thresholdValue: item.thresholdValue,
         unit: item.unit.trim() || undefined,
         options: item.fieldType === "SELECT" ? item.options : undefined,
-        description: item.description.trim() || undefined,
+        sourceText: item.description.trim() || undefined,
         isRequired: item.isRequired,
         sortOrder: item.sortOrder,
       })),
     }
 
-    const { data, error } = await onSubmit(payload)
+    const parsed = createChecklistSchema.safeParse(payload)
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || "Invalid checklist"); setIsSaving(false); return }
+    const { data, error } = await onSubmit(parsed.data)
 
     if (error) {
       toast.error(error)
-    } else {
+    } else if (data) {
       onSuccess(data)
     }
 
     setIsSaving(false)
   }
+
+  if (isLoading) return <p>Loading workspace…</p>
+  if (!canEdit) return <p>You do not have permission to edit checklists.</p>
 
   return (
     <div className="animate-fade-up max-w-4xl">
@@ -202,6 +226,8 @@ export function ChecklistForm({
 
       <PageHeader title={mode === "create" ? "Create Checklist" : "Edit Checklist"} />
 
+      {mode === "create" && <div className="rounded-xl border bg-white p-5 mb-6"><h2 className="text-sm font-semibold">Start from a policy document</h2><p className="text-xs text-muted-foreground mt-1 mb-3">Scan a PDF, DOCX, image or text file, then review the extracted criteria.</p><div className="flex flex-wrap items-center gap-3"><input aria-label="Policy file to scan" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt" onChange={e => setScanFile(e.target.files?.[0] || null)} className="text-sm" /><button disabled={!scanFile || isScanning} onClick={scanPolicy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50">{isScanning ? "Scanning policy…" : "Scan policy"}</button></div></div>}
+
       {/* Checklist metadata */}
       <div
         className="rounded-xl p-6 mb-6"
@@ -213,7 +239,7 @@ export function ChecklistForm({
         <div className="space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-secondary mb-2">
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
               Checklist name <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
@@ -247,7 +273,7 @@ export function ChecklistForm({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-secondary mb-2">
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
               Description
             </label>
             <textarea

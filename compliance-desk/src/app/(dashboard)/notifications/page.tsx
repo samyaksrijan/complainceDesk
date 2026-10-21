@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import {
+    formatRelativeTime,
+    notifIcon,
+    notifIconBg,
+    notifIconColor,
+} from "@/components/notifications/notification-bell"
 import { api } from "@/lib/api"
 import { usePageTitle } from "@/lib/use-page-title"
-import {
-  notifIcon,
-  notifIconColor,
-  notifIconBg,
-  formatRelativeTime,
-} from "@/components/notifications/notification-bell"
-import { Bell, CheckCheck, Search, X, Trash2, BookCheck } from "lucide-react"
+import { Bell, BookCheck, CheckCheck, Search, Trash2, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ export default function NotificationsPage() {
   }, [page, typeFilter, readStatus, search])
 
   useEffect(() => {
-    fetchData()
+    void Promise.resolve().then(fetchData)
   }, [fetchData])
 
   // Debounce search
@@ -103,27 +103,30 @@ export default function NotificationsPage() {
 
   const markRead = async (n: Notification) => {
     if (!n.read) {
+      const { error } = await api.put(`/api/notifications/${n.id}/read`)
+      if (error) { toast.error(error); return }
       setItems((prev) => prev.map((i) => i.id === n.id ? { ...i, read: true } : i))
       setUnreadCount((c) => Math.max(0, c - 1))
-      await api.put(`/api/notifications/${n.id}/read`)
     }
     const nav = getNavTarget(n)
     if (nav) router.push(nav)
   }
 
   const dismiss = async (id: string) => {
+    const { error } = await api.delete(`/api/notifications/${id}`)
+    if (error) { toast.error(error); return }
     const removed = items.find((i) => i.id === id)
     setItems((prev) => prev.filter((i) => i.id !== id))
     if (removed && !removed.read) setUnreadCount((c) => Math.max(0, c - 1))
-    await api.delete(`/api/notifications/${id}`)
     toast.success("Notification dismissed")
   }
 
   const markAllRead = async () => {
     if (unreadCount === 0) return
+    const { error } = await api.put("/api/notifications/mark-all-read")
+    if (error) { toast.error(error); return }
     setItems((prev) => prev.map((i) => ({ ...i, read: true })))
     setUnreadCount(0)
-    await api.put("/api/notifications/mark-all-read")
     toast.success("All notifications marked as read")
   }
 

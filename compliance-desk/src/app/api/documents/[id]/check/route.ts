@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { SessionUser } from "@/lib/rbac"
-import { runComplianceCheck } from "@/services/compliance"
 import { logActivity } from "@/services/activity"
-import { checkRateLimit, RATE_LIMITS, getClientIp } from "@/lib/rate-limit"
+import { runComplianceCheck } from "@/services/compliance"
+import { NextResponse } from "next/server"
 
 // POST /api/documents/[id]/check
 // Run compliance check on a document against its matched checklist
@@ -34,8 +34,7 @@ export async function POST(
     }
 
     // Fix 7: Rate limit LLM-consuming endpoints
-    const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`check:${ip}`, RATE_LIMITS.LLM_SCAN)
+    const rateLimit = await checkRateLimit(`check:${user.id}`, RATE_LIMITS.LLM_SCAN)
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
@@ -65,21 +64,25 @@ export async function POST(
       )
     }
 
-    // Update status to PROCESSING
-    await prisma.document.update({
-      where: { id },
-      data: { status: "PROCESSING" },
+    if (!document.extractedText) return NextResponse.json({ error: "Document has no extracted text. Re-upload it before evaluation." }, { status: 422 })
+    if (document.extractedText.length > 240000) return NextResponse.json({ error: "Split documents above 240,000 extracted characters before evaluation." }, { status: 413 })
+    const lease = new Date()
+    const claim = await prisma.document.updateMany({
+      where: { id, orgId: user.orgId, OR: [{ status: { not: "PROCESSING" } }, { status: "PROCESSING", processingStartedAt: null }, { processingStartedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }] },
+      data: { status: "PROCESSING", processingStartedAt: lease },
     })
+    if (claim.count !== 1) return NextResponse.json({ error: "This document is already being evaluated. Please refresh shortly." }, { status: 409 })
 
     try {
       // Run compliance check
       const result = await runComplianceCheck(
         id,
-        document.matchedChecklistId
+        document.matchedChecklistId,
+        lease
       )
 
       // Fix 23: Use logActivity service
-      logActivity({
+      await logActivity({
         orgId: user.orgId,
         userId: user.id,
         action: "document.checked",
@@ -94,15 +97,18 @@ export async function POST(
       })
 
       return NextResponse.json(result)
-    } catch (checkError: any) {
+    } catch (caught) {
+    const checkError = caught instanceof Error ? caught : new Error(String(caught))
       // Revert status on failure
-      await prisma.document.update({
-        where: { id },
-        data: { status: "MATCHED" },
+      await prisma.document.updateMany({
+        where: { id, processingStartedAt: lease },
+        data: { status: "MATCHED", processingStartedAt: null },
       })
       throw checkError
     }
-  } catch (error: any) {
+  } catch (caught) {
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
     console.error("Compliance check error:", error)
 
     if (error.message?.includes("LLM providers failed")) {

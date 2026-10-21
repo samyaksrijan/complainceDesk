@@ -1,14 +1,19 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { api } from "@/lib/api"
 import { useAuth } from "@/components/providers/auth-provider"
+import { api } from "@/lib/api"
 import {
-  Search, FileText, CheckSquare, BarChart, LayoutDashboard,
-  Settings, Users, ClipboardList, Bell, Upload, X, ArrowRight,
-  Clock,
+    ArrowRight,
+    BarChart,
+    CheckSquare,
+    Clock,
+    FileText,
+    Search,
+    Users,
+    X
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 interface SearchResult {
   id: string
@@ -80,56 +85,50 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   // Load recent on open
   useEffect(() => {
-    if (open) {
-      setRecent(getRecent())
-      setQuery("")
-      setResults([])
-      setActiveIdx(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
+    const timer = setTimeout(() => {
+      if (open) { setRecent(getRecent()); setQuery(""); setResults([]); setActiveIdx(0); inputRef.current?.focus() }
+    }, 0)
+    return () => clearTimeout(timer)
   }, [open])
 
   // Search with debounce
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([])
-      return
-    }
+    if (!query.trim()) return
 
     const timer = setTimeout(async () => {
       setIsSearching(true)
       const q = encodeURIComponent(query.trim())
 
       const [docRes, checkRes, repRes, userRes] = await Promise.all([
-        api.get(`/api/documents?search=${q}&limit=5`),
-        api.get(`/api/checklists?search=${q}&limit=5`),
-        api.get(`/api/reports?limit=20`), // no search param on reports, filter client-side
-        isAdmin ? api.get(`/api/admin/users?search=${q}&limit=5`) : Promise.resolve({ data: null }),
+        api.get<{ documents: Array<{ id: string; name: string; status: string }> }>(`/api/documents?search=${q}&limit=5`),
+        api.get<{ checklists: Array<{ id: string; name: string; category: string }> }>(`/api/checklists?search=${q}&limit=5`),
+        api.get<{ items: Array<{ id: string; name: string; status: string }> }>(`/api/reports?limit=20`), // no search param on reports, filter client-side
+        isAdmin ? api.get<{ users: Array<{ id: string; name: string; email: string; role: string }> }>(`/api/admin/users?search=${q}&limit=5`) : Promise.resolve({ data: null }),
       ])
 
       const found: SearchResult[] = []
 
-      if (docRes.data?.items) {
-        docRes.data.items.forEach((d: any) => {
+      if (docRes.data?.documents) {
+        docRes.data.documents.forEach((d) => {
           found.push({ id: `doc-${d.id}`, label: d.name, sublabel: d.status, href: `/documents/${d.id}`, category: "documents" })
         })
       }
-      if (checkRes.data?.items) {
-        checkRes.data.items.forEach((c: any) => {
+      if (checkRes.data?.checklists) {
+        checkRes.data.checklists.forEach((c) => {
           found.push({ id: `chk-${c.id}`, label: c.name, sublabel: c.category, href: `/checklists/${c.id}`, category: "checklists" })
         })
       }
       if (repRes.data?.items) {
         const q_lower = query.toLowerCase()
         repRes.data.items
-          .filter((r: any) => r.name.toLowerCase().includes(q_lower))
+          .filter((r) => r.name.toLowerCase().includes(q_lower))
           .slice(0, 5)
-          .forEach((r: any) => {
+          .forEach((r) => {
             found.push({ id: `rep-${r.id}`, label: r.name, sublabel: r.status, href: `/reports/${r.id}`, category: "reports" })
           })
       }
       if (userRes.data?.users) {
-        userRes.data.users.forEach((u: any) => {
+        userRes.data.users.forEach((u) => {
           found.push({ id: `usr-${u.id}`, label: u.name, sublabel: u.email, href: `/admin/users`, category: "users" })
         })
       }
@@ -231,7 +230,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               style={{ color: "var(--text-primary)" }}
               aria-label="Command palette search"
               role="combobox"
-              aria-expanded="true"
+              aria-expanded={open}
+              aria-controls="command-search-results"
               aria-autocomplete="list"
             />
             {query && (
@@ -256,7 +256,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           </div>
 
           {/* Results list */}
-          <div className="max-h-80 overflow-y-auto" ref={listRef} role="listbox">
+          <div className="max-h-80 overflow-y-auto" ref={listRef} role="listbox" id="command-search-results">
             {isSearching && (
               <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 Searching…

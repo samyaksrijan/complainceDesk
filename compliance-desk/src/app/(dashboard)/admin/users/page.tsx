@@ -1,36 +1,25 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { PaginationControls } from "@/components/ui/pagination-controls"
+
 import { useAuth } from "@/components/providers/auth-provider"
-import { usePageTitle } from "@/lib/use-page-title"
-import { api } from "@/lib/api"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { toast } from "sonner"
 import {
-  UserPlus,
-  Search,
-  MoreVertical,
-  Shield,
-  UserX,
-  UserCheck,
-  Trash2,
-  X,
-  AlertTriangle,
-  Loader2,
-  Copy,
-  Users,
-  CheckCircle2,
-  Mail,
-  Lock,
-} from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog"
+import { api } from "@/lib/api"
+import { usePageTitle } from "@/lib/use-page-title"
+import {
+    Search,
+    Trash2,
+    UserPlus
+} from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 
 interface AdminUser {
   id: string
@@ -46,6 +35,9 @@ export default function AdminUsersPage() {
   usePageTitle("User Governance")
   const { user, isAdmin } = useAuth()
 
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -60,57 +52,27 @@ export default function AdminUsersPage() {
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true)
-    const { data, error } = await api.get<{ users: AdminUser[] }>("/api/admin/users")
+    const { data, error } = await api.get<{ users: AdminUser[]; total: number; totalPages: number }>(`/api/admin/users?page=${page}&search=${encodeURIComponent(search)}`)
 
-    if (error || !data?.users?.length) {
-      setUsers([
-        {
-          id: "u-1",
-          name: "System Administrator",
-          email: "admin@demo.com",
-          role: "ADMIN",
-          status: "ACTIVE",
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
-          lastLoginAt: new Date().toISOString(),
-        },
-        {
-          id: "u-2",
-          name: "Dr. Eleanor Vance",
-          email: "auditor@demo.com",
-          role: "AUDITOR",
-          status: "ACTIVE",
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15).toISOString(),
-          lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        },
-        {
-          id: "u-3",
-          name: "Observer Officer",
-          email: "viewer@demo.com",
-          role: "VIEWER",
-          status: "ACTIVE",
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
-          lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-        },
-      ])
-    } else {
-      setUsers(data.users)
-    }
+    if (error) toast.error(error)
+    setUsers(data?.users || [])
+    setTotalPages(data?.totalPages || 1)
+    setTotal(data?.total || 0)
     setIsLoading(false)
-  }, [])
+  }, [page, search])
 
   useEffect(() => {
-    fetchUsers()
+    void Promise.resolve().then(fetchUsers)
   }, [fetchUsers])
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      const { data, error } = await api.post("/api/admin/users", {
+      const { error } = await api.post("/api/admin/users/invite", {
         name: inviteName,
         email: inviteEmail,
         role: inviteRole,
-        password: "TemporaryPassword123!",
       })
 
       if (error) {
@@ -122,7 +84,7 @@ export default function AdminUsersPage() {
         setInviteEmail("")
         fetchUsers()
       }
-    } catch (e) {
+    } catch {
       toast.error("Failed to provision user")
     } finally {
       setIsSubmitting(false)
@@ -141,10 +103,17 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function changeMember(id: string, field: "role" | "status", value: string) {
+    const { error } = await api.put(`/api/admin/users/${id}/${field}`, { [field]: value })
+    if (error) toast.error(error)
+    else { toast.success("Member updated"); await fetchUsers() }
+  }
   const filteredUsers = users.filter((u) =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
   )
+
+  if (!isAdmin) return <p className="p-6">Administrator access required.</p>
 
   return (
     <div className="space-y-6 pb-12 font-sans">
@@ -152,7 +121,7 @@ export default function AdminUsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
               Access Governance
             </span>
           </div>
@@ -169,7 +138,7 @@ export default function AdminUsersPage() {
             onClick={() => setInviteOpen(true)}
             className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer font-sans"
           >
-            <UserPlus className="h-4 w-4 text-amber-400" />
+            <UserPlus className="h-4 w-4 text-brand-400" />
             Provision New User
           </button>
         </div>
@@ -184,8 +153,8 @@ export default function AdminUsersPage() {
               type="text"
               placeholder="Search directory by name or email…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
             />
           </div>
           <span className="text-xs text-slate-500 font-mono font-medium">
@@ -225,12 +194,10 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <StatusBadge status={u.role} />
+                      <select aria-label={`Role for ${u.name}`} value={u.role} disabled={u.id === user?.id} onChange={e => changeMember(u.id, "role", e.target.value)} className="rounded-lg border bg-white p-1.5"><option value="ADMIN">Admin</option><option value="AUDITOR">Auditor</option><option value="VIEWER">Viewer</option></select>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                        {u.status || "ACTIVE"}
-                      </span>
+                      <select aria-label={`Status for ${u.name}`} value={u.status} disabled={u.id === user?.id} onChange={e => changeMember(u.id, "status", e.target.value)} className="rounded-lg border bg-white p-1.5"><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select>
                     </td>
                     <td className="py-3.5 px-4 text-slate-500 text-[11px] font-mono hidden md:table-cell font-medium">
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Pending login"}
@@ -254,12 +221,14 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
+      <PaginationControls page={page} totalPages={totalPages} total={total} onChange={setPage} />
+
       {/* Invite Modal */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-slate-200 text-slate-900 p-6 rounded-2xl shadow-xl font-sans">
           <DialogHeader className="space-y-1">
             <div className="flex items-center gap-2 mb-1">
-              <div className="h-8 w-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+              <div className="h-8 w-8 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
                 <UserPlus className="h-4 w-4" />
               </div>
               <DialogTitle className="text-base font-bold text-slate-900 tracking-tight font-display">
@@ -282,7 +251,7 @@ export default function AdminUsersPage() {
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
                 required
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
               />
             </div>
 
@@ -296,7 +265,7 @@ export default function AdminUsersPage() {
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 required
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 font-medium"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 font-medium"
               />
             </div>
 
@@ -307,7 +276,7 @@ export default function AdminUsersPage() {
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium focus:outline-none focus:border-brand-500 cursor-pointer"
               >
                 <option value="ADMIN">Admin (Full administrative control)</option>
                 <option value="AUDITOR">Auditor (Upload documents & run evaluations)</option>
@@ -340,10 +309,10 @@ export default function AdminUsersPage() {
         open={!!deleteTarget}
         title="Revoke Member Access"
         description={`Are you sure you want to revoke workspace access for "${deleteTarget?.name}"?`}
-        confirmText="Revoke Access"
+        confirmLabel="Revoke Access"
         variant="destructive"
         onConfirm={handleDeleteUser}
-        onCancel={() => setDeleteTarget(null)}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
       />
     </div>
   )

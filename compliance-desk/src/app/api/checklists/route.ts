@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuditorOrAdmin, withAnyRole, SessionUser } from "@/lib/rbac"
-import { createChecklistSchema, checklistQuerySchema, parsePagination } from "@/lib/validation"
+import { SessionUser, withAnyRole, withAuditorOrAdmin } from "@/lib/rbac"
+import { createChecklistSchema, parsePagination } from "@/lib/validation"
 import { logActivity } from "@/services/activity"
 import { Prisma } from "@prisma/client"
+import { NextResponse } from "next/server"
 
 // GET /api/checklists — List checklists
 export const GET = withAnyRole(
@@ -24,15 +24,9 @@ export const GET = withAnyRole(
       // Fix 9: Template cross-org visibility
       const where: Prisma.ChecklistWhereInput = {}
 
-      if (queryParams.isTemplate === "true") {
-        // Show templates from ALL orgs + own org's checklists
-        where.OR = [
-          { orgId: user.orgId },
-          { isTemplate: true },
-        ]
-      } else {
-        where.orgId = user.orgId
-      }
+      where.OR = [{ orgId: user.orgId }, { isSystemTemplate: true }]
+      if (queryParams.isTemplate === "true") where.isTemplate = true
+      if (queryParams.isTemplate === "false") { where.orgId = user.orgId; where.isTemplate = false }
 
       if (queryParams.category) {
         where.category = queryParams.category
@@ -90,6 +84,7 @@ export const GET = withAnyRole(
         },
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("List checklists error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },
@@ -136,9 +131,9 @@ export const POST = withAuditorOrAdmin(
               unit: item.unit || null,
               condition: item.condition,
               thresholdValue: item.thresholdValue,
-              options: item.options || null,
+              options: item.options || undefined,
               sourceText: item.sourceText || null,
-              confidence: item.confidence || null,
+              confidence: item.confidence ?? null,
               regulationRef: item.regulationRef || null,
               sortOrder: item.sortOrder,
             })),
@@ -151,7 +146,7 @@ export const POST = withAuditorOrAdmin(
       })
 
       // Fix 23: Use logActivity service (silent fail)
-      logActivity({
+      await logActivity({
         orgId: user.orgId,
         userId: user.id,
         action: "checklist.created",
@@ -162,6 +157,7 @@ export const POST = withAuditorOrAdmin(
 
       return NextResponse.json(checklist, { status: 201 })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Create checklist error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },

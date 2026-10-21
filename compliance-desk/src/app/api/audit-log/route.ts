@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAnyRole, SessionUser } from "@/lib/rbac"
+import { SessionUser, withAnyRole } from "@/lib/rbac"
+import { Prisma } from "@prisma/client"
+import { NextResponse } from "next/server"
 
 // GET /api/audit-log
 // Query: page, limit, action, search, startDate, endDate
@@ -25,7 +26,7 @@ export const GET = withAnyRole(
       const endDate = url.searchParams.get("endDate") || ""
 
       // Build WHERE clause
-      const where: any = { orgId: user.orgId }
+      const where: Prisma.ActivityLogWhereInput = { orgId: user.orgId }
 
       if (action) {
         where.action = action
@@ -114,12 +115,15 @@ export const GET = withAnyRole(
 
       return NextResponse.json({
         items: enriched,
+        logs: enriched,
+        pagination: { total, totalPages: Math.ceil(total / limit), page, limit },
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       })
     } catch (error) {
+      if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 })
       console.error("Audit log error:", error)
       return NextResponse.json(
         { error: "Internal server error", code: "INTERNAL_ERROR" },
