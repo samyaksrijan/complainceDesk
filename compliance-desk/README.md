@@ -21,6 +21,8 @@ npm run dev
 
 Register the first organization at `/register`. Optional local demo data: `npm run db:seed` (destructive; replaces data and refuses production). Demo users authenticate through PostgreSQL; there is no built-in password bypass.
 
+On macOS with Homebrew PostgreSQL 17 installed, `brew services start postgresql@17` keeps the local database running across logins. Check `http://localhost:3000/api/health`: both `database` and `schema` should report `ok`. A service-unavailable sign-in message means the database connection or migrations need attention; changing the password will not resolve it. The development account buttons fill credentials and require the seeded users to exist.
+
 With Docker, configure `.env`, then `docker compose up --build`. Compose starts PostgreSQL, applies migrations, and starts the application using persistent local volumes. This is a local configuration, not the AWS production profile.
 
 ## Verification

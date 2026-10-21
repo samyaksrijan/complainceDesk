@@ -260,3 +260,31 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Auth uses a light surface even when the browser or password manager prefers dark inputs. */
+.auth-shell {
+  color-scheme: light;
+}
+
+.auth-shell input {
+  color: #182b27;
+  caret-color: #365f51;
+  -webkit-text-fill-color: #182b27;
+}
+
+.auth-shell input::placeholder {
+  color: #52665d;
+  -webkit-text-fill-color: #52665d;
+  opacity: 1;
+}
+
+.auth-shell input:autofill {
+  color: #182b27;
+  -webkit-text-fill-color: #182b27;
+  box-shadow: 0 0 0 1000px #f0f6f2 inset;
+}
+
+.auth-shell input:-webkit-autofill {
+  -webkit-text-fill-color: #182b27;
+  box-shadow: 0 0 0 1000px #f0f6f2 inset;
+}
